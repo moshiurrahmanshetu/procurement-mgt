@@ -1,0 +1,325 @@
+/**
+ * Procurement Management CMS — Installer Stylesheet
+ * Clean, restrained, professional marketplace UI
+ */
+
+:root {
+    --installer-bg: #f8fafc;
+    --installer-card-bg: #ffffff;
+    --installer-primary: #1e293b;
+    --installer-accent: #2563eb;
+    --installer-accent-hover: #1d4ed8;
+    --installer-success: #059669;
+    --installer-danger: #dc2626;
+    --installer-warning: #d97706;
+    --installer-text: #334155;
+    --installer-text-muted: #64748b;
+    --installer-border: #e2e8f0;
+    --installer-header-bg: #0f172a;
+}
+
+body.installer-body {
+    background-color: var(--installer-bg);
+    color: var(--installer-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header & Branding */
+.installer-navbar {
+    background-color: var(--installer-header-bg);
+    border-bottom: 1px solid #1e293b;
+    padding: 1rem 0;
+}
+
+.installer-brand {
+    color: #ffffff;
+    font-size: 1.25rem;
+    font-weight: 600;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.installer-brand-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    background-color: var(--installer-accent);
+    color: #ffffff;
+    border-radius: 8px;
+    font-size: 1.25rem;
+}
+
+.installer-badge {
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    background-color: #334155;
+    color: #e2e8f0;
+}
+
+/* Main Container & Card */
+.installer-wrapper {
+    flex: 1 0 auto;
+    padding: 2.5rem 0;
+}
+
+.installer-card {
+    background-color: var(--installer-card-bg);
+    border: 1px solid var(--installer-border);
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+}
+
+.installer-card-header {
+    background-color: #ffffff;
+    border-bottom: 1px solid var(--installer-border);
+    padding: 1.5rem 2rem;
+}
+
+.installer-card-body {
+    padding: 2rem;
+}
+
+.installer-card-footer {
+    background-color: #f8fafc;
+    border-top: 1px solid var(--installer-border);
+    padding: 1.25rem 2rem;
+}
+
+/* Wizard Step Progress Tracker */
+.installer-steps {
+    display: flex;
+    justify-content: space-between;
+    position: relative;
+    margin-bottom: 1.5rem;
+    padding: 0 1rem;
+}
+
+.installer-steps::before {
+    content: "";
+    position: absolute;
+    top: 20px;
+    left: 40px;
+    right: 40px;
+    height: 2px;
+    background-color: var(--installer-border);
+    z-index: 1;
+}
+
+.step-item {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    background-color: #ffffff;
+    padding: 0 0.5rem;
+}
+
+.step-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #f1f5f9;
+    border: 2px solid var(--installer-border);
+    color: var(--installer-text-muted);
+    font-weight: 600;
+    font-size: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.step-label {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--installer-text-muted);
+    display: block;
+}
+
+.step-item.active .step-circle {
+    background-color: var(--installer-accent);
+    border-color: var(--installer-accent);
+    color: #ffffff;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15);
+}
+
+.step-item.active .step-label {
+    color: var(--installer-accent);
+    font-weight: 600;
+}
+
+.step-item.completed .step-circle {
+    background-color: var(--installer-success);
+    border-color: var(--installer-success);
+    color: #ffffff;
+}
+
+.step-item.completed .step-label {
+    color: var(--installer-success);
+}
+
+/* Requirements UI */
+.requirement-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--installer-primary);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.table-requirements {
+    margin-bottom: 1.75rem;
+    border: 1px solid var(--installer-border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.table-requirements thead th {
+    background-color: #f8fafc;
+    color: var(--installer-primary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--installer-border);
+    padding: 0.75rem 1rem;
+}
+
+.table-requirements tbody td {
+    padding: 0.85rem 1rem;
+    vertical-align: middle;
+    font-size: 0.9rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.table-requirements tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.table-requirements tbody tr.row-failed {
+    background-color: #fef2f2;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.3rem 0.65rem;
+    border-radius: 6px;
+}
+
+.status-badge.passed {
+    background-color: #ecfdf5;
+    color: var(--installer-success);
+    border: 1px solid #a7f3d0;
+}
+
+.status-badge.failed {
+    background-color: #fef2f2;
+    color: var(--installer-danger);
+    border: 1px solid #fecaca;
+}
+
+.status-badge.warning {
+    background-color: #fffbeb;
+    color: var(--installer-warning);
+    border: 1px solid #fde68a;
+}
+
+/* Buttons */
+.btn-installer-primary {
+    background-color: var(--installer-accent);
+    color: #ffffff;
+    border: 1px solid var(--installer-accent);
+    font-weight: 600;
+    padding: 0.6rem 1.4rem;
+    border-radius: 8px;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-installer-primary:hover:not(:disabled) {
+    background-color: var(--installer-accent-hover);
+    border-color: var(--installer-accent-hover);
+    color: #ffffff;
+}
+
+.btn-installer-primary:disabled {
+    background-color: #94a3b8;
+    border-color: #94a3b8;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.btn-installer-secondary {
+    background-color: #ffffff;
+    color: var(--installer-text);
+    border: 1px solid var(--installer-border);
+    font-weight: 500;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-installer-secondary:hover {
+    background-color: #f1f5f9;
+    color: var(--installer-primary);
+    border-color: #cbd5e1;
+}
+
+/* Footer */
+.installer-footer {
+    background-color: #ffffff;
+    border-top: 1px solid var(--installer-border);
+    padding: 1.25rem 0;
+    font-size: 0.85rem;
+    color: var(--installer-text-muted);
+    flex-shrink: 0;
+}
+
+/* Lock Screen */
+.lock-card {
+    border-left: 4px solid var(--installer-danger);
+}
+
+@media (max-width: 768px) {
+    .installer-steps {
+        padding: 0;
+    }
+    .installer-steps::before {
+        left: 20px;
+        right: 20px;
+    }
+    .step-label {
+        font-size: 0.7rem;
+    }
+    .step-circle {
+        width: 32px;
+        height: 32px;
+        font-size: 0.8rem;
+    }
+    .installer-card-header,
+    .installer-card-body,
+    .installer-card-footer {
+        padding: 1.25rem;
+    }
+}
