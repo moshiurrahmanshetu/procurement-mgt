@@ -241,44 +241,58 @@ procurement-mgt/
 
 ---
 
-## Installation & Setup Guide
+## Marketplace Installation & Setup Guide
 
-### 1. Prerequisites
-- **Web Server:** Apache with `mod_rewrite` enabled.
-- **PHP Version:** PHP 8.0 or higher with `pdo_mysql`, `fileinfo`, `mbstring`, and `openssl` extensions enabled.
-- **Database:** MySQL 5.7+ or MariaDB 10.4+.
-
-### 2. Setup Steps
-1. Place the project directory inside your web server root (e.g. `C:\xampp\htdocs\procurement-mgt\` or `/var/www/html/procurement-mgt/`).
-2. Open MySQL/phpMyAdmin and create a database named `procurement_mgt`.
-3. Import the 6 SQL schema files in sequential order.
-4. Verify database credentials in `config/config.php`:
-   ```php
-   define('DB_HOST', '127.0.0.1');
-   define('DB_PORT', 3306);
-   define('DB_NAME', 'procurement_mgt');
-   define('DB_USER', 'root');
-   define('DB_PASS', '');
-   ```
-5. Open your web browser and navigate to:
+### Method A: Web-Based Installation Wizard (Recommended)
+1. Extract the project ZIP into your web server directory (e.g. `C:\xampp\htdocs\procurement-mgt\` or `/var/www/html/procurement/`).
+2. Create an empty MySQL / MariaDB database (e.g., in cPanel or phpMyAdmin).
+3. Open your browser and navigate to the application URL:
    ```
    http://localhost/procurement-mgt/
+   ```
+   *(The system automatically detects uninstalled status and opens `/installer/`).*
+4. **Step 1 — Requirements:** Review server prerequisites (PHP 8.0+, PDO MySQL, JSON, Sessions, Writable directories).
+5. **Step 2 — Database:** Enter your database host, port, name, username, and password. Click **"Test Connection"** to verify live connectivity.
+6. **Step 3 — Import:** Select the bundled master schema (`database/install.sql`) and click **"Import & Continue"**.
+7. **Step 4 — Administrator:** Set up your primary administrator account (Full Name, Username, Email, and Secure Password).
+8. **Step 5 — Complete:** The installer writes `config/config.php`, verifies live connection, applies the permanent security lock (`config/installed.lock`), and redirects to login!
+
+---
+
+### Method B: Manual CLI / phpMyAdmin Setup (Developers)
+
+1. Create a MySQL database named `procurement_mgt`.
+2. Import the bundled master schema file:
+   ```bash
+   mysql -u root -p procurement_mgt < database/install.sql
+   ```
+   *(Or import `database/01_auth_schema.sql` through `database/06_reports_settings_schema.sql` sequentially).*
+3. Configure `config/config.php` with your database credentials.
+4. Create the lock file to mark installation complete:
+   ```bash
+   touch config/installed.lock
    ```
 
 ---
 
-## Database Import Order
+## Master Database Schema
 
-Import the SQL migration files in this exact sequential order:
+The production-ready master schema is bundled in:
+```
+database/install.sql
+```
+*(Individual migration files `01_auth_schema.sql` through `06_reports_settings_schema.sql` are preserved for modular developer reference).*
 
-```
-1. database/01_auth_schema.sql
-2. database/02_purchase_requests_schema.sql
-3. database/03_suppliers_quotations_schema.sql
-4. database/04_purchase_orders_schema.sql
-5. database/05_goods_receiving_schema.sql
-6. database/06_reports_settings_schema.sql
-```
+---
+
+## Manual Reinstall Procedure
+
+To re-run the web installer from scratch:
+1. Back up your existing data.
+2. Delete the installation lock file: `rm config/installed.lock`.
+3. Drop/empty the database.
+4. Navigate to `/installer/` in your browser.
+
 
 ---
 

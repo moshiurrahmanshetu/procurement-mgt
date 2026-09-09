@@ -4,6 +4,12 @@
  * Procurement Management CMS
  */
 
+// Redirect to installer if application is not installed yet
+if (!file_exists(dirname(__DIR__) . '/config/installed.lock')) {
+    header('Location: ../installer/');
+    exit;
+}
+
 require_once dirname(__DIR__) . '/includes/init.php';
 
 // Redirect if already logged in

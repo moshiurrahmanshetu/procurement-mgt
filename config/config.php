@@ -1,7 +1,8 @@
 <?php
 /**
  * System Configuration
- * Procurement Management CMS
+ * Procurement Management CMS — Production Configuration
+ * Generated on: 2026-09-09 19:27:00
  */
 
 // Timezone Setting
@@ -32,7 +33,7 @@ if (!defined('DB_CHARSET')) {
     define('DB_CHARSET', 'utf8mb4');
 }
 
-// Development Mode (true: shows dev reset link & detailed local debug when safe)
+// Development Mode
 if (!defined('DEV_MODE')) {
-    define('DEV_MODE', true);
+    define('DEV_MODE', false);
 }

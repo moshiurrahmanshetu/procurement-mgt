@@ -1,24 +1,48 @@
-# Marketplace Web Installer — Phase 01: Foundation & Requirements Check
+# Marketplace Web Installer — Complete Technical Reference
 
-Welcome to the **Procurement Management CMS Web Installer**. This installer provides a web-based, zero-command-line installation workflow for shared hosting, cPanel, and VPS buyers.
+The **Procurement Management CMS Web Installer** provides a modern, secure, web-based installation wizard for deploying the application on shared hosting (cPanel, DirectAdmin), VPS, and local environments (XAMPP, WAMP, Docker).
 
 ---
 
-## 1. Phase 01 Scope & Status
+## 1. Full Installation Flow
 
-### What Phase 01 Does:
-- **Isolated Installer Bootstrap:** Runs independently of the CMS database and application session (`installer/includes/installer-functions.php`).
-- **Comprehensive Requirements Checker:** Evaluates PHP version, extensions, ini directives, and writable storage paths (`installer/includes/requirements.php`).
-- **Modern Marketplace UI:** Professional Bootstrap 5 + Bootstrap Icons multi-step wizard interface with solid business styling (`installer/assets/css/installer.css`).
-- **Installation Lock Detection:** Safely determines whether the system has already been installed via `config/installed.lock` (`isInstallationLocked()`).
-- **Dynamic Path & URL Resolution:** Fully portable across domain roots and subdirectories with zero hardcoded filesystem paths or URLs.
-
-### What Phase 01 Does NOT Do:
-- Does NOT connect to MySQL or write database credentials (reserved for **Phase 02**).
-- Does NOT import database schemas or tables (reserved for **Phase 03**).
-- Does NOT create administrator accounts (reserved for **Phase 04**).
-- Does NOT overwrite `config/config.php` (reserved for **Phase 05**).
-- Does NOT create an active lock file blocking fresh installs (reserved for **Phase 06**).
+```
+Step 1: System Requirements Check (installer/index.php)
+  ├── Evaluates PHP 8.0+, required extensions, ini directives, and writable directories
+  └── Enables progression only when all critical checks pass
+         │
+         ▼
+Step 2: Database Setup & Connection Testing (installer/database.php)
+  ├── Captures Host, Port, Database Name, Username, and Password
+  ├── Live AJAX / POST Connection Test via PDO (safe error categorization)
+  └── Stores validated credentials in isolated installer session
+         │
+         ▼
+Step 3: Database Schema Import (installer/import.php)
+  ├── Bundled Master Schema: database/install.sql (21 tables + static lookups)
+  ├── Optional: Upload custom .sql file (max 5MB, security validated)
+  ├── Detects existing application tables to prevent accidental data loss
+  └── Executes schema with temporary foreign key suppression and safe quote-aware parser
+         │
+         ▼
+Step 4: Primary Administrator Account Setup (installer/admin.php)
+  ├── Captures Full Name, Username, Email, Password, and Confirmation
+  ├── Strict password policy (minimum 8 characters, common password protection)
+  ├── Uses password_hash(..., PASSWORD_BCRYPT)
+  └── Assigns Administrator role and initializes system activity audit log
+         │
+         ▼
+Step 5: System Finalization & Security Lock (installer/finalize.php)
+  ├── Generates and saves config/config.php with rigorous PHP escaping (var_export)
+  ├── Performs live PDO connection verification with newly saved configuration
+  ├── Creates permanent installation lock file: config/installed.lock
+  └── Cleans up sensitive credentials from installer session
+         │
+         ▼
+Step 6: Completion & Login (installer/complete.php)
+  ├── Displays installation summary and credentials confirmation
+  └── Direct link to application login (auth/login.php)
+```
 
 ---
 
@@ -28,52 +52,52 @@ Welcome to the **Procurement Management CMS Web Installer**. This installer prov
 installer/
 ├── assets/
 │   ├── css/
-│   │   └── installer.css            # Clean, responsive installer styling
+│   │   └── installer.css            # Restrained, modern marketplace styling
 │   └── js/
-│       └── installer.js             # Vanilla JS for interactive elements & tooltips
+│       └── installer.js             # Vanilla JS for AJAX connection test & tooltips
 ├── includes/
-│   ├── installer-footer.php         # Reusable HTML footer & script imports
-│   ├── installer-functions.php      # Isolated helper functions (URL, path, lock checks)
-│   ├── installer-header.php         # Reusable HTML header & 5-step progress bar
-│   └── requirements.php             # Core environment & permission verification engine
-├── database.php                     # Step 2 informational placeholder for Phase 02
-├── index.php                        # Step 1: System requirements entry point
+│   ├── installer-footer.php         # Reusable footer layout & scripts
+│   ├── installer-functions.php      # Core helpers (PDO tester, SQL engine, config writer, lock)
+│   ├── installer-header.php         # Reusable header with 5-step progress bar
+│   └── requirements.php             # System environment & permissions engine
+├── index.php                        # Step 1: System Requirements Check
+├── database.php                     # Step 2: Database Setup & Live Tester
+├── import.php                       # Step 3: Database Schema Import
+├── admin.php                        # Step 4: Administrator Account Setup
+├── finalize.php                     # Step 5: Finalization & Security Lock
+├── complete.php                     # Step 6: Installation Complete & Login
 └── README.md                        # Installer documentation & technical reference
 ```
 
 ---
 
-## 3. System Requirements Checked
+## 3. Security Architecture & Lock Protection
 
-| Component | Required Value | Critical / Warning | Purpose |
-|---|---|---|---|
-| **PHP Version** | `8.0.0+` | **Critical** | Pure native PHP 8 syntax & performance |
-| **file_uploads** | `On / Enabled` | **Critical** | Document, logo, and avatar file uploads |
-| **upload_max_filesize** | `2M+` | Info / Recommendation | File upload size tolerance |
-| **memory_limit** | `128M+` | Info / Recommendation | Report generation memory allocation |
-| **PDO Extension** | `Enabled` | **Critical** | Secure prepared statements |
-| **PDO MySQL Driver** | `Enabled` | **Critical** | MySQL / MariaDB database connectivity |
-| **Session Support** | `Enabled` | **Critical** | User authentication & CSRF validation |
-| **JSON Extension** | `Enabled` | **Critical** | Data interchange & structured fields |
-| **mbstring Extension** | `Enabled` | **Critical** | UTF-8 multibyte character processing |
-| **fileinfo Extension** | `Enabled` | **Critical** | Server-side MIME verification |
-| **OpenSSL Support** | `Enabled` | Recommended | Cryptographic token generation |
-| **GD Library** | `Enabled` | Recommended | Image rendering & manipulation |
-| **ctype Extension** | `Enabled` | Recommended | String type validation |
-| **config/ Directory** | `Writable` | **Critical** | Future generation of configuration file |
-| **assets/uploads/ Directory** | `Writable` | **Critical** | Attachment & asset storage |
-| **assets/uploads/avatars/** | `Writable` | **Critical** | User avatar image storage |
-| **assets/uploads/logos/** | `Writable` | **Critical** | Company branding logo storage |
+1. **Every Installer Entry Point Protected:**
+   Every single file in `installer/` checks `installer_is_locked()` before processing. Once `config/installed.lock` exists, the installer wizard is completely inaccessible and immediately displays a locked advisory screen.
+2. **First-Run Redirection:**
+   When an uninstalled system is accessed via `/` or `/auth/login.php`, the system detects the absence of `config/installed.lock` and redirects to `/installer/` without triggering database errors.
+3. **Strict CSRF Tokens:**
+   All POST submissions (database parameters, schema import, administrator creation) require a cryptographic CSRF token generated and verified independently of the CMS database.
+4. **No Plaintext Passwords / Credential Leakage:**
+   Passwords are never logged, never stored in plaintext, never displayed in output HTML, and never written into lock files or client JavaScript.
+5. **Safe Configuration Generation:**
+   `config/config.php` is generated using safe token escaping (`var_export()`) to prevent PHP code injection.
 
 ---
 
-## 4. Local Access & Verification
+## 4. Manual Reinstallation Procedure (Admins & Developers)
 
-To access the installation wizard on a local development server:
-```
-http://localhost/procurement-mgt/installer/
-```
+For security reasons, there is **no public web-accessible reinstall button**. If a server administrator or developer needs to reinstall the CMS from scratch:
 
-- If all mandatory requirements pass: The **"Continue to Database Setup"** button is enabled.
-- If any mandatory requirement fails: The button is disabled, and clear resolution instructions are displayed in red.
-- If the application is locked via `config/installed.lock`: The wizard displays a locked notification screen and redirects to login.
+1. **Backup Existing Data:**
+   Take a complete backup of the database and `config/config.php` if required.
+2. **Remove the Installation Lock:**
+   Delete the lock file located on the server:
+   ```bash
+   rm config/installed.lock
+   ```
+3. **Prepare an Empty Database:**
+   Create a fresh empty MySQL database or drop the old tables in phpMyAdmin / MySQL CLI.
+4. **Run the Installer:**
+   Navigate to `http://your-domain.com/installer/` and complete the setup wizard.

@@ -42,7 +42,7 @@ $currentStep = $currentStep ?? 1;
             </a>
             <div class="d-none d-sm-flex align-items-center gap-2">
                 <span class="installer-badge">
-                    <i class="bi bi-shield-check me-1"></i> Phase 01: Requirements
+                    <i class="bi bi-shield-check me-1"></i> Setup Wizard
                 </span>
             </div>
         </div>
@@ -68,7 +68,7 @@ $currentStep = $currentStep ?? 1;
                         <span class="step-label">Requirements</span>
                     </div>
 
-                    <div class="step-item <?= $currentStep === 2 ? 'active' : '' ?> <?= $currentStep > 2 ? 'completed' : '' ?>">
+                    <div class="step-item <?= $currentStep >= 2 ? 'active' : '' ?> <?= $currentStep > 2 ? 'completed' : '' ?>">
                         <div class="step-circle">
                             <?php if ($currentStep > 2): ?>
                                 <i class="bi bi-check-lg"></i>
@@ -79,7 +79,7 @@ $currentStep = $currentStep ?? 1;
                         <span class="step-label">Database</span>
                     </div>
 
-                    <div class="step-item <?= $currentStep === 3 ? 'active' : '' ?> <?= $currentStep > 3 ? 'completed' : '' ?>">
+                    <div class="step-item <?= $currentStep >= 3 ? 'active' : '' ?> <?= $currentStep > 3 ? 'completed' : '' ?>">
                         <div class="step-circle">
                             <?php if ($currentStep > 3): ?>
                                 <i class="bi bi-check-lg"></i>
@@ -90,7 +90,7 @@ $currentStep = $currentStep ?? 1;
                         <span class="step-label">Import</span>
                     </div>
 
-                    <div class="step-item <?= $currentStep === 4 ? 'active' : '' ?> <?= $currentStep > 4 ? 'completed' : '' ?>">
+                    <div class="step-item <?= $currentStep >= 4 ? 'active' : '' ?> <?= $currentStep > 4 ? 'completed' : '' ?>">
                         <div class="step-circle">
                             <?php if ($currentStep > 4): ?>
                                 <i class="bi bi-check-lg"></i>
@@ -101,8 +101,14 @@ $currentStep = $currentStep ?? 1;
                         <span class="step-label">Admin</span>
                     </div>
 
-                    <div class="step-item <?= $currentStep === 5 ? 'active' : '' ?>">
-                        <div class="step-circle">5</div>
+                    <div class="step-item <?= $currentStep >= 5 ? 'active' : '' ?> <?= $currentStep >= 5 ? 'completed' : '' ?>">
+                        <div class="step-circle">
+                            <?php if ($currentStep >= 5): ?>
+                                <i class="bi bi-check-lg"></i>
+                            <?php else: ?>
+                                5
+                            <?php endif; ?>
+                        </div>
                         <span class="step-label">Finish</span>
                     </div>
                 </div>
