@@ -371,3 +371,28 @@ function getPoStatusBadge(string $status): string
     );
 }
 
+/**
+ * Returns a styled Bootstrap badge for goods receipt (GRN) statuses.
+ *
+ * @param string $status
+ * @return string
+ */
+function getGrnStatusBadge(string $status): string
+{
+    $statusMap = [
+        'draft'     => ['class' => 'bg-secondary-subtle text-secondary border border-secondary-subtle', 'icon' => 'bi-file-earmark', 'label' => 'Draft'],
+        'posted'    => ['class' => 'bg-success-subtle text-success border border-success-subtle', 'icon' => 'bi-check-circle-fill', 'label' => 'Posted (Locked)'],
+        'cancelled' => ['class' => 'bg-danger-subtle text-danger border border-danger-subtle', 'icon' => 'bi-slash-circle', 'label' => 'Cancelled']
+    ];
+
+    $item = $statusMap[$status] ?? ['class' => 'bg-light text-dark border', 'icon' => 'bi-circle', 'label' => ucfirst(str_replace('_', ' ', $status))];
+
+    return sprintf(
+        '<span class="badge %s px-2 py-1 small fw-semibold d-inline-flex align-items-center gap-1"><i class="bi %s"></i> %s</span>',
+        $item['class'],
+        $item['icon'],
+        htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8')
+    );
+}
+
+

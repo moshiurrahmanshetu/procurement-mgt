@@ -75,13 +75,32 @@ if (!$po) {
     redirect('modules/purchase_orders/index.php');
 }
 
-// 2. Fetch PO Items
+// 2. Fetch PO Items with Cumulative POSTED received quantities
 $items = [];
 try {
     $itemStmt = $db->prepare("
-        SELECT * FROM purchase_order_items 
-        WHERE purchase_order_id = :po_id 
-        ORDER BY id ASC
+        SELECT poi.*,
+               COALESCE((
+                   SELECT SUM(gri.received_qty)
+                   FROM goods_receipt_items gri
+                   JOIN goods_receipts gr ON gr.id = gri.goods_receipt_id
+                   WHERE gr.purchase_order_id = poi.purchase_order_id
+                     AND gr.status = 'posted'
+                     AND gr.deleted_at IS NULL
+                     AND gri.purchase_order_item_id = poi.id
+               ), 0) AS cumulative_received_qty,
+               COALESCE((
+                   SELECT SUM(gri.rejected_qty)
+                   FROM goods_receipt_items gri
+                   JOIN goods_receipts gr ON gr.id = gri.goods_receipt_id
+                   WHERE gr.purchase_order_id = poi.purchase_order_id
+                     AND gr.status = 'posted'
+                     AND gr.deleted_at IS NULL
+                     AND gri.purchase_order_item_id = poi.id
+               ), 0) AS cumulative_rejected_qty
+        FROM purchase_order_items poi 
+        WHERE poi.purchase_order_id = :po_id 
+        ORDER BY poi.id ASC
     ");
     $itemStmt->execute([':po_id' => $poId]);
     $items = $itemStmt->fetchAll();
@@ -89,7 +108,26 @@ try {
     error_log('Error fetching PO Items: ' . $e->getMessage());
 }
 
-// 3. Fetch Audit History
+// 3. Fetch Related Goods Receipts (GRNs)
+$poGrns = [];
+try {
+    $grnStmt = $db->prepare("
+        SELECT gr.*, u.full_name AS receiver_name,
+               (SELECT COUNT(*) FROM goods_receipt_items WHERE goods_receipt_id = gr.id) AS item_count,
+               (SELECT COALESCE(SUM(received_qty), 0) FROM goods_receipt_items WHERE goods_receipt_id = gr.id) AS total_received_qty,
+               (SELECT COALESCE(SUM(rejected_qty), 0) FROM goods_receipt_items WHERE goods_receipt_id = gr.id) AS total_rejected_qty
+        FROM goods_receipts gr
+        LEFT JOIN users u ON u.id = gr.received_by
+        WHERE gr.purchase_order_id = :po_id AND gr.deleted_at IS NULL
+        ORDER BY gr.id DESC
+    ");
+    $grnStmt->execute([':po_id' => $poId]);
+    $poGrns = $grnStmt->fetchAll();
+} catch (Exception $e) {
+    error_log('Error fetching PO GRNs: ' . $e->getMessage());
+}
+
+// 4. Fetch Audit History
 $history = [];
 try {
     $hStmt = $db->prepare("
@@ -116,19 +154,14 @@ $canApprove = false;
 $canReject = false;
 if ($po['status'] === 'pending_approval') {
     if ($isAdmin || $isManager) {
-        // If Manager or Admin, check if self-approval restriction applies
-        if ($isManager && $isCreator && !userHasRole('administrator')) {
-            // Manager who created the PO: allow if system permits, or block if strict. Admin can always approve.
-            $canApprove = true;
-            $canReject = true;
-        } else {
-            $canApprove = true;
-            $canReject = true;
-        }
+        $canApprove = true;
+        $canReject = true;
     }
 }
 
 $canSend = ($po['status'] === 'approved' && ($isAdmin || $isOfficer));
+// Goods Receiving can only occur if PO is 'sent' or 'partially_received'
+$canReceiveGoods = (in_array($po['status'], ['sent', 'partially_received']) && ($isAdmin || $isOfficer));
 // Cancellation allowed from draft, pending_approval, or approved. Sent POs CANNOT be cancelled.
 $canCancel = (in_array($po['status'], ['draft', 'pending_approval', 'approved']) && ($isAdmin || $isManager || $isOfficer));
 
@@ -170,7 +203,31 @@ include dirname(__DIR__, 2) . '/includes/header.php';
     </div>
 
     <!-- Status Specific Banners -->
-    <?php if ($po['status'] === 'sent'): ?>
+    <?php if ($po['status'] === 'fully_received'): ?>
+        <div class="alert alert-success border-success-subtle shadow-sm d-flex align-items-center gap-3 p-3 rounded-3 mb-4">
+            <div class="bg-success text-white p-3 rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                <i class="bi bi-box2-check-fill fs-4"></i>
+            </div>
+            <div>
+                <h5 class="alert-heading fw-bold mb-1">Purchase Order 100% Fully Fulfilled</h5>
+                <p class="mb-0 small text-success-emphasis">
+                    All ordered items have been 100% received, inspected, and confirmed across posted Goods Receipt Notes. This procurement contract is complete.
+                </p>
+            </div>
+        </div>
+    <?php elseif ($po['status'] === 'partially_received'): ?>
+        <div class="alert alert-info border-info-subtle shadow-sm d-flex align-items-center gap-3 p-3 rounded-3 mb-4">
+            <div class="bg-info text-white p-3 rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                <i class="bi bi-box-seam fs-4"></i>
+            </div>
+            <div>
+                <h5 class="alert-heading fw-bold mb-1">Purchase Order Partially Received</h5>
+                <p class="mb-0 small text-info-emphasis">
+                    Shipments have been partially received and posted. Additional shipments are expected from <strong><?= e($po['supplier_name']) ?></strong> to fulfill the remaining balance.
+                </p>
+            </div>
+        </div>
+    <?php elseif ($po['status'] === 'sent'): ?>
         <div class="alert alert-success border-success-subtle shadow-sm d-flex align-items-center gap-3 p-3 rounded-3 mb-4">
             <div class="bg-success text-white p-3 rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
                 <i class="bi bi-send-check-fill fs-4"></i>
@@ -179,7 +236,7 @@ include dirname(__DIR__, 2) . '/includes/header.php';
                 <h5 class="alert-heading fw-bold mb-1">Purchase Order Officially Dispatched</h5>
                 <p class="mb-0 small text-success-emphasis">
                     This order has been officially sent to <strong><?= e($po['supplier_name']) ?></strong> on <strong><?= formatDate($po['sent_at'], 'd M Y, h:i A') ?></strong>.
-                    It represents a legally binding procurement agreement and cannot be modified or cancelled.
+                    It is active and ready for warehouse receiving inspection.
                 </p>
             </div>
         </div>
@@ -216,7 +273,7 @@ include dirname(__DIR__, 2) . '/includes/header.php';
     <?php endif; ?>
 
     <!-- Workflow Action Toolbar -->
-    <?php if (in_array($po['status'], ['draft', 'pending_approval', 'approved'])): ?>
+    <?php if (in_array($po['status'], ['draft', 'pending_approval', 'approved', 'sent', 'partially_received'])): ?>
         <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white border-start border-primary border-4">
             <div class="card-body p-3 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
                 <div class="d-flex align-items-center gap-2">
@@ -275,6 +332,13 @@ include dirname(__DIR__, 2) . '/includes/header.php';
                         <?php endif; ?>
                     <?php endif; ?>
 
+                    <!-- Sent / Partially Received Actions -> Goods Receiving -->
+                    <?php if ($canReceiveGoods): ?>
+                        <a href="<?= url('modules/goods_receiving/create.php?po_id=' . $po['id']) ?>" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1 shadow-sm">
+                            <i class="bi bi-box-arrow-in-down"></i> Receive Goods (New GRN)
+                        </a>
+                    <?php endif; ?>
+
                     <!-- Cancel Action (for draft, pending_approval, approved) -->
                     <?php if ($canCancel): ?>
                         <button type="button" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#cancelModal">
@@ -287,13 +351,13 @@ include dirname(__DIR__, 2) . '/includes/header.php';
     <?php endif; ?>
 
     <div class="row g-4 mb-4">
-        <!-- Left Column: Line Items, Delivery & Terms -->
+        <!-- Left Column: Line Items, Delivery & Terms, Goods Receipts -->
         <div class="col-lg-8">
             <!-- Line Items Table Card -->
             <div class="card border-0 shadow-sm rounded-3 mb-4">
                 <div class="card-header bg-white border-bottom py-3 d-flex align-items-center justify-content-between">
                     <h6 class="mb-0 fw-bold text-dark d-flex align-items-center gap-2">
-                        <i class="bi bi-box-seam text-primary"></i> Purchase Order Line Items
+                        <i class="bi bi-box-seam text-primary"></i> Purchase Order Line Items & Fulfillment
                     </h6>
                     <span class="badge bg-light text-secondary border"><?= count($items) ?> items</span>
                 </div>
@@ -303,16 +367,23 @@ include dirname(__DIR__, 2) . '/includes/header.php';
                             <thead class="table-light text-muted small text-uppercase">
                                 <tr>
                                     <th class="ps-3" style="width: 4%;">#</th>
-                                    <th style="width: 34%;">Item Name & Details</th>
-                                    <th class="text-center" style="width: 14%;">Quantity</th>
-                                    <th class="text-end" style="width: 16%;">Unit Price</th>
-                                    <th class="text-center" style="width: 10%;">Tax %</th>
-                                    <th class="text-end" style="width: 10%;">Discount</th>
-                                    <th class="text-end pe-3" style="width: 12%;">Line Total</th>
+                                    <th style="width: 28%;">Item Name & Details</th>
+                                    <th class="text-center" style="width: 10%;">Ordered</th>
+                                    <th class="text-center" style="width: 10%;">Received</th>
+                                    <th class="text-center" style="width: 10%;">Remaining</th>
+                                    <th class="text-end" style="width: 13%;">Unit Price</th>
+                                    <th class="text-center" style="width: 8%;">Tax %</th>
+                                    <th class="text-end" style="width: 8%;">Discount</th>
+                                    <th class="text-end pe-3" style="width: 11%;">Line Total</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach ($items as $idx => $item): ?>
+                                    <?php
+                                    $ordered = (float)$item['quantity'];
+                                    $rec = (float)$item['cumulative_received_qty'];
+                                    $rem = max(0.0, $ordered - $rec);
+                                    ?>
                                     <tr>
                                         <td class="ps-3 text-muted small"><?= $idx + 1 ?></td>
                                         <td>
@@ -322,10 +393,28 @@ include dirname(__DIR__, 2) . '/includes/header.php';
                                             <?php endif; ?>
                                         </td>
                                         <td class="text-center">
-                                            <span class="fw-semibold text-dark font-monospace"><?= number_format((float)$item['quantity'], 2) ?></span>
+                                            <span class="fw-semibold text-dark font-monospace"><?= number_format($ordered, 2) ?></span>
                                             <span class="small text-muted ms-1"><?= e($item['unit']) ?></span>
                                         </td>
-                                        <td class="text-end font-monospace text-dark">
+                                        <td class="text-center font-monospace">
+                                            <?php if ($rec > 0): ?>
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle fw-semibold">
+                                                    +<?= number_format($rec, 2) ?>
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="text-muted">0.00</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="text-center font-monospace">
+                                            <?php if ($rem <= 0.0001): ?>
+                                                <span class="badge bg-success text-white small">Complete</span>
+                                            <?php else: ?>
+                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">
+                                                    <?= number_format($rem, 2) ?>
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="text-end font-monospace text-dark small">
                                             <?= formatCurrency($item['unit_price']) ?>
                                         </td>
                                         <td class="text-center font-monospace small">
@@ -344,6 +433,91 @@ include dirname(__DIR__, 2) . '/includes/header.php';
                     </div>
                 </div>
             </div>
+
+            <!-- Goods Receipt Notes (GRNs) Card -->
+            <div class="card border-0 shadow-sm rounded-3 mb-4">
+                <div class="card-header bg-white border-bottom py-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <h6 class="mb-0 fw-bold text-dark d-flex align-items-center gap-2">
+                        <i class="bi bi-box-arrow-in-down text-primary"></i> Goods Receipt Notes (GRNs)
+                    </h6>
+                    <?php if ($canReceiveGoods): ?>
+                        <a href="<?= url('modules/goods_receiving/create.php?po_id=' . $po['id']) ?>" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1">
+                            <i class="bi bi-plus-lg"></i> New GRN
+                        </a>
+                    <?php endif; ?>
+                </div>
+                <div class="card-body p-0">
+                    <?php if (!empty($poGrns)): ?>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light text-muted small text-uppercase">
+                                    <tr>
+                                        <th class="ps-3">GRN No</th>
+                                        <th>Receipt Date</th>
+                                        <th>Delivery Note #</th>
+                                        <th>Received By</th>
+                                        <th class="text-center">Accepted / Rej Qty</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-end pe-3">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($poGrns as $grn): ?>
+                                        <tr>
+                                            <td class="ps-3">
+                                                <a href="<?= url('modules/goods_receiving/view.php?id=' . $grn['id']) ?>" class="badge bg-primary-subtle text-primary border border-primary-subtle text-decoration-none fw-semibold font-monospace py-1 px-2">
+                                                    <?= e($grn['grn_no']) ?>
+                                                </a>
+                                            </td>
+                                            <td class="small text-muted font-monospace">
+                                                <?= formatDate($grn['receipt_date'], 'd M Y') ?>
+                                            </td>
+                                            <td class="small font-monospace text-dark">
+                                                <?= !empty($grn['delivery_note_no']) ? e($grn['delivery_note_no']) : '<span class="text-muted fst-italic">None</span>' ?>
+                                            </td>
+                                            <td class="small text-dark fw-medium">
+                                                <?= e($grn['receiver_name'] ?? 'Authorized Officer') ?>
+                                            </td>
+                                            <td class="text-center small font-monospace">
+                                                <span class="text-success fw-bold">+<?= number_format((float)$grn['total_received_qty'], 2) ?></span>
+                                                <?php if ((float)$grn['total_rejected_qty'] > 0): ?>
+                                                    <span class="text-danger ms-1">(-<?= number_format((float)$grn['total_rejected_qty'], 2) ?>)</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td class="text-center">
+                                                <?= getGrnStatusBadge($grn['status']) ?>
+                                            </td>
+                                            <td class="text-end pe-3">
+                                                <div class="btn-group btn-group-sm">
+                                                    <a href="<?= url('modules/goods_receiving/view.php?id=' . $grn['id']) ?>" class="btn btn-outline-secondary" title="View GRN">
+                                                        <i class="bi bi-eye"></i>
+                                                    </a>
+                                                    <a href="<?= url('modules/goods_receiving/print.php?id=' . $grn['id']) ?>" target="_blank" class="btn btn-outline-secondary" title="Print GRN">
+                                                        <i class="bi bi-printer"></i>
+                                                    </a>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php else: ?>
+                        <div class="text-center py-4 text-muted small">
+                            <i class="bi bi-box-seam fs-3 text-secondary d-block mb-1"></i>
+                            No goods receipt notes recorded for this purchase order yet.
+                            <?php if ($canReceiveGoods): ?>
+                                <div class="mt-2">
+                                    <a href="<?= url('modules/goods_receiving/create.php?po_id=' . $po['id']) ?>" class="btn btn-primary btn-sm">
+                                        <i class="bi bi-box-arrow-in-down me-1"></i> Receive First Shipment
+                                    </a>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
 
             <!-- Delivery & Logistics Details Card -->
             <div class="card border-0 shadow-sm rounded-3 mb-4">

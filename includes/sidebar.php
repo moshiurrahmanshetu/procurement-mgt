@@ -72,6 +72,12 @@ $isAdmin = userHasRole('administrator');
                     <span>Purchase Orders</span>
                 </a>
             </li>
+            <li class="nav-item">
+                <a href="<?= url('modules/goods_receiving/index.php') ?>" class="nav-link <?= ($activeNav === 'goods_receiving') ? 'active' : '' ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Goods Receiving (GRN)">
+                    <i class="bi bi-box-seam-fill"></i>
+                    <span>Goods Receiving</span>
+                </a>
+            </li>
         </ul>
 
         <?php if ($isAdmin): ?>

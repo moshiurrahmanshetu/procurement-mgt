@@ -168,7 +168,64 @@ try {
     error_log('Dashboard Phase 04 PO Query Error: ' . $e->getMessage());
 }
 
-// 5. Fetch Recent Activity Logs
+// 5. Fetch Phase 05 Goods Receiving Summary Metrics
+$grnStats = [
+    'total'              => 0,
+    'draft'              => 0,
+    'posted'             => 0,
+    'partially_received' => 0,
+    'fully_received'     => 0
+];
+$recentGrns = [];
+
+try {
+    $grnStatStmt = $db->query("
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) AS draft,
+            SUM(CASE WHEN status = 'posted' THEN 1 ELSE 0 END) AS posted
+        FROM goods_receipts
+        WHERE deleted_at IS NULL
+    ");
+    $grnCounts = $grnStatStmt->fetch();
+    if ($grnCounts) {
+        $grnStats['total'] = (int)$grnCounts['total'];
+        $grnStats['draft'] = (int)$grnCounts['draft'];
+        $grnStats['posted'] = (int)$grnCounts['posted'];
+    }
+
+    $poReceivingStmt = $db->query("
+        SELECT
+            SUM(CASE WHEN status = 'partially_received' THEN 1 ELSE 0 END) AS partially_received,
+            SUM(CASE WHEN status = 'fully_received' THEN 1 ELSE 0 END) AS fully_received
+        FROM purchase_orders
+        WHERE deleted_at IS NULL
+    ");
+    $poRecCounts = $poReceivingStmt->fetch();
+    if ($poRecCounts) {
+        $grnStats['partially_received'] = (int)$poRecCounts['partially_received'];
+        $grnStats['fully_received'] = (int)$poRecCounts['fully_received'];
+    }
+
+    // Fetch Top 5 Recent GRNs
+    $rgrnStmt = $db->query("
+        SELECT gr.*, po.po_no, s.name AS supplier_name, s.supplier_code, u.full_name AS receiver_name,
+               (SELECT COUNT(*) FROM goods_receipt_items WHERE goods_receipt_id = gr.id) AS item_count,
+               (SELECT COALESCE(SUM(received_qty), 0) FROM goods_receipt_items WHERE goods_receipt_id = gr.id) AS total_received_qty
+        FROM goods_receipts gr
+        JOIN purchase_orders po ON po.id = gr.purchase_order_id
+        JOIN suppliers s ON s.id = gr.supplier_id
+        LEFT JOIN users u ON u.id = gr.received_by
+        WHERE gr.deleted_at IS NULL
+        ORDER BY gr.id DESC
+        LIMIT 5
+    ");
+    $recentGrns = $rgrnStmt->fetchAll();
+} catch (Exception $e) {
+    error_log('Dashboard Phase 05 GRN Query Error: ' . $e->getMessage());
+}
+
+// 6. Fetch Recent Activity Logs
 $activityLogs = [];
 try {
     $actStmt = $db->prepare("
@@ -194,7 +251,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
             <div class="col-lg-7">
                 <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
                     <span class="badge bg-primary px-3 py-2 fs-7 font-monospace fw-semibold">
-                        <i class="bi bi-file-earmark-check-fill me-1"></i> Phase 04: Purchase Order Management
+                        <i class="bi bi-box-seam-fill me-1"></i> Phase 05: Goods Receiving / GRN
                     </span>
                     <span class="badge bg-success bg-opacity-75 px-3 py-2 fs-7">
                         <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i> <?= ucfirst(e($user['status'])) ?>
@@ -211,6 +268,9 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
                     <i class="bi bi-plus-lg me-1"></i> New Request
                 </a>
                 <?php if ($canViewAll): ?>
+                    <a href="<?= url('modules/goods_receiving/create.php') ?>" class="btn btn-warning btn-sm fw-semibold px-3 py-2 shadow-sm text-dark">
+                        <i class="bi bi-box-arrow-in-down me-1"></i> Receive Goods
+                    </a>
                     <a href="<?= url('modules/purchase_orders/create.php') ?>" class="btn btn-info btn-sm fw-semibold px-3 py-2 shadow-sm text-dark">
                         <i class="bi bi-file-earmark-plus-fill me-1"></i> Issue PO
                     </a>
@@ -417,6 +477,61 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
     </div>
 </div>
 
+<!-- Goods Receiving & Warehouse Intake Metrics (Phase 05) -->
+<div class="row g-3 mb-4">
+    <!-- Total GRNs -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card border-start border-primary border-4">
+            <div class="stat-icon" style="width: 42px; height: 42px; font-size: 1.25rem; background-color: #dbeafe; color: #1d4ed8;">
+                <i class="bi bi-box-arrow-in-down"></i>
+            </div>
+            <div>
+                <div class="stat-label" style="font-size: 0.75rem;">Total Goods Receipts</div>
+                <h4 class="stat-value fs-5 text-dark"><?= number_format((int)$grnStats['total']) ?></h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Posted GRNs -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card border-start border-success border-4">
+            <div class="stat-icon success" style="width: 42px; height: 42px; font-size: 1.25rem;">
+                <i class="bi bi-check-circle-fill"></i>
+            </div>
+            <div>
+                <div class="stat-label" style="font-size: 0.75rem;">Posted Receipts (Locked)</div>
+                <h4 class="stat-value fs-5 text-success"><?= number_format((int)$grnStats['posted']) ?></h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Partially Received POs -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card border-start border-info border-4">
+            <div class="stat-icon" style="width: 42px; height: 42px; font-size: 1.25rem; background-color: #e0f2fe; color: #0284c7;">
+                <i class="bi bi-box-seam"></i>
+            </div>
+            <div>
+                <div class="stat-label" style="font-size: 0.75rem;">Partially Received POs</div>
+                <h4 class="stat-value fs-5 text-info"><?= number_format((int)$grnStats['partially_received']) ?></h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fully Received POs -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card border-start border-success border-4">
+            <div class="stat-icon success" style="width: 42px; height: 42px; font-size: 1.25rem;">
+                <i class="bi bi-box2-check-fill"></i>
+            </div>
+            <div>
+                <div class="stat-label" style="font-size: 0.75rem;">Fully Fulfilled POs</div>
+                <h4 class="stat-value fs-5 text-success"><?= number_format((int)$grnStats['fully_received']) ?></h4>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Main Content Grid: Recent PRs & System Audit -->
 <div class="row g-4 mb-4">
     <!-- Recent Purchase Requests Table -->
@@ -598,6 +713,83 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
             <div class="text-center py-4 text-muted small">
                 <i class="bi bi-file-earmark-x fs-2 text-secondary d-block mb-1"></i>
                 No purchase orders generated yet.
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- Recent Goods Receipts (GRNs) Card (Phase 05) -->
+<div class="card-cms mb-4">
+    <div class="card-cms-header d-flex justify-content-between align-items-center">
+        <h3 class="card-cms-title">
+            <i class="bi bi-box-seam-fill text-primary"></i>
+            <span>Recent Goods Receipts (GRN)</span>
+        </h3>
+        <a href="<?= url('modules/goods_receiving/index.php') ?>" class="btn btn-outline-secondary btn-sm">
+            View All Receipts <i class="bi bi-arrow-right ms-1"></i>
+        </a>
+    </div>
+    <div class="card-cms-body p-0">
+        <?php if (!empty($recentGrns)): ?>
+            <div class="table-responsive">
+                <table class="table table-cms align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>GRN Number</th>
+                            <th>Purchase Order</th>
+                            <th>Supplier Vendor</th>
+                            <th>Receipt Date</th>
+                            <th>Received By</th>
+                            <th class="text-center">Accepted Items</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($recentGrns as $rgrn): ?>
+                            <tr>
+                                <td>
+                                    <a href="<?= url('modules/goods_receiving/view.php?id=' . $rgrn['id']) ?>" class="fw-bold font-monospace text-primary text-decoration-none">
+                                        <?= e($rgrn['grn_no']) ?>
+                                    </a>
+                                </td>
+                                <td>
+                                    <a href="<?= url('modules/purchase_orders/view.php?id=' . $rgrn['purchase_order_id']) ?>" class="text-dark fw-semibold text-decoration-none small font-monospace">
+                                        <?= e($rgrn['po_no']) ?>
+                                    </a>
+                                </td>
+                                <td>
+                                    <div class="fw-medium text-dark small"><?= e($rgrn['supplier_name']) ?></div>
+                                    <span class="text-muted font-monospace small" style="font-size: 0.6875rem;"><?= e($rgrn['supplier_code']) ?></span>
+                                </td>
+                                <td class="small text-muted font-monospace">
+                                    <?= formatDate($rgrn['receipt_date'], 'd M Y') ?>
+                                </td>
+                                <td class="small text-dark fw-medium">
+                                    <?= e($rgrn['receiver_name'] ?? 'Authorized Officer') ?>
+                                </td>
+                                <td class="text-center small font-monospace">
+                                    <span class="badge bg-light text-dark border">
+                                        <?= (int)$rgrn['item_count'] ?> items &bull; +<?= number_format((float)$rgrn['total_received_qty'], 0) ?> rec
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    <?= getGrnStatusBadge($rgrn['status']) ?>
+                                </td>
+                                <td class="text-end">
+                                    <a href="<?= url('modules/goods_receiving/view.php?id=' . $rgrn['id']) ?>" class="btn btn-outline-secondary btn-sm" title="View GRN">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php else: ?>
+            <div class="text-center py-4 text-muted small">
+                <i class="bi bi-box-seam fs-2 text-secondary d-block mb-1"></i>
+                No goods receipts recorded yet.
             </div>
         <?php endif; ?>
     </div>

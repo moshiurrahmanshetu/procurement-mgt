@@ -23,24 +23,47 @@ A business-grade, secure, and responsive Procurement Management Content Manageme
 - Enterprise master layout, collapsible sidebar with `localStorage` persistence, and dynamic user initials avatar fallback.
 - User profile editing, secure avatar upload/removal with `finfo` server-side MIME detection, and bcrypt password changes.
 
-#### Phase 03: Supplier Management & Quotation Management
-- Separate schema migration (`database/03_suppliers_quotations_schema.sql`) creating `suppliers`, `supplier_contacts`, `quotations`, `quotation_items`, and `quotation_history`.
+### Phase 02: Purchase Request Management
+- Schema migration (`database/02_purchase_requests_schema.sql`) for requests, multi-item line items, and audit history.
+- Auto-generated requisition sequence (`PR-000001`, `PR-000002`).
+- Multi-item dynamic input grid with client and server-side validation.
+- Lifecycle: `draft` -> `pending_approval` -> `approved` / `rejected` / `cancelled`.
+
+### Phase 03: Supplier & Quotation Management
+- Schema migration (`database/03_suppliers_quotations_schema.sql`) creating `suppliers`, `supplier_contacts`, `quotations`, `quotation_items`, and `quotation_history`.
 - **Supplier Directory (`modules/suppliers/`)**:
-  - Full CRUD operations with auto-sequenced vendor codes (`SUP-000001`, `SUP-000002`).
+  - Full CRUD operations with auto-sequenced vendor codes (`SUP-000001`).
   - Company profiles, tax/VAT registration, addresses, banking details, and internal notes.
-  - Multi-contact person support with primary contact indicator and role designations.
-  - Complete vendor quotation history and awarded contract statistics.
-  - Soft-delete safeguarding historical bids and quotations for audit compliance.
+  - Multi-contact person support with primary contact indicator.
 - **Quotation Management (`modules/quotations/`)**:
-  - Creation of quotations linked to **approved** Purchase Requests only.
-  - Auto-sequenced quotation identifiers (`QT-000001`, `QT-000002`).
-  - Duplicate bid prevention (one quotation per supplier per PR).
-  - Multi-item pricing grid with live client-side subtotal, tax %, shipping, other charges, and grand total calculations, coupled with strict server-side validation.
-  - State machine transitions: `draft` -> `submitted` -> `under_review` -> `selected` / `rejected`.
-  - **Quotation Comparison Matrix (`compare.php`)**: Side-by-side evaluation matrix with lowest-bid indicator, line item price comparisons, and variance against PR estimated budgets.
-  - **Winning Quotation Selection (`select.php`)**: Single winning bid selection by Administrator or Manager that automatically and safely marks all competing bids for that PR as `rejected` in a single database transaction.
-  - **Rejection with Reason (`reject.php`)**: Rejection logging requiring mandatory justification comments.
-  - **Chronological Audit Trail (`history.php`)**: Full state-change timeline and audit logs.
+  - Linked to approved Purchase Requests.
+  - Auto-sequenced quotation identifiers (`QT-000001`).
+  - Multi-item pricing grid with live client-side subtotal, tax %, shipping, and grand totals.
+  - Side-by-side **Quotation Comparison Matrix (`compare.php`)** with lowest-bid indicator.
+  - Winning bid selection (`select.php`) with automated rejection of competing bids in a single transaction.
+
+### Phase 04: Purchase Order Management
+- Schema migration (`database/04_purchase_orders_schema.sql`) creating `purchase_orders`, `purchase_order_items`, and `purchase_order_history`.
+- **Creation Pathways (`modules/purchase_orders/`)**:
+  - Direct conversion from selected winning Quotation (auto-populating vendor, PR reference, line items, and agreed pricing).
+  - Standalone PO generation for direct supplier procurement.
+- Auto-sequenced PO numbering (`PO-000001`).
+- Lifecycle: `draft` -> `pending_approval` -> `approved` -> `sent` -> `partially_received` / `fully_received` / `cancelled` / `closed`.
+- A4 printable purchase order document (`print.php`) with clean print CSS and signature blocks.
+
+### Phase 05: Goods Receiving / GRN Management
+- Schema migration (`database/05_goods_receiving_schema.sql`) creating `goods_receipts`, `goods_receipt_items`, and `goods_receipt_history`.
+- **Core Goods Receiving Rules (`modules/goods_receiving/`)**:
+  - Intake initiates strictly against Purchase Orders in `sent` or `partially_received` status.
+  - Auto-sequenced Goods Receipt numbering (`GRN-000001`, `GRN-000002`).
+  - Accepted intake (`received_qty`) vs damaged/defective tracking (`rejected_qty`).
+  - Live calculations for previously accepted quantities, remaining balances, and line completion status.
+  - Strict server-side prevention of over-receiving across multiple partial shipments.
+  - State machine: `draft` -> `posted`.
+  - **Draft GRNs:** Modifiable and soft-deletable (`deleted_at = NOW()`), does not affect PO cumulative counts.
+  - **Posted GRNs:** Permanent, immutable receiving document. Modifying or deleting is strictly prevented.
+  - **Automated PO Status Transitions:** Posting a GRN automatically updates the PO status to `partially_received` or `fully_received` based on cumulative accepted items.
+  - Standalone A4 printable GRN document (`print.php`) with delivery notes, carrier info, inspection remarks, and signature boxes.
 
 ---
 
@@ -67,21 +90,66 @@ A business-grade, secure, and responsive Procurement Management Content Manageme
 ### 2. Supplier Quotation State Machine
 ```
    [Approved PR]
-         │
-         ▼
+          │
+          ▼
  [Create Quotation]
-         │
-         ▼
-      (Draft) ───────────────► [Delete Draft]
-         │
-         ▼ [Submit]
+          │
+          ▼
+       (Draft) ───────────────► [Delete Draft]
+          │
+          ▼ [Submit]
     (Submitted)
-         │
-         ▼ [Mark Under Review]
+          │
+          ▼ [Mark Under Review]
    (Under Review) ────────────► [Reject Bid (Mandatory Reason)]
-         │
-         ▼ [Award Winning Bid]
+          │
+          ▼ [Award Winning Bid]
      (Selected) ───► [Automatically Rejects Competing Bids for PR]
+```
+
+### 3. Purchase Order State Machine
+```
+   [Selected Quotation / Direct PO]
+                 │
+                 ▼
+              (Draft) ──────────────────► [Delete Draft]
+                 │
+                 ▼ [Submit for Approval]
+        (Pending Approval) ─────────────► [Reject PO]
+                 │
+                 ▼ [Approve PO]
+             (Approved) ────────────────► [Cancel PO]
+                 │
+                 ▼ [Send to Supplier]
+               (Sent) ──────────────────► [Cancel PO]
+                 │
+                 ▼ [Post Goods Receipt (GRN)]
+   ┌─────────────────────────────┐
+   │                             │
+   ▼                             ▼
+(Partially Received)      (Fully Received)
+   │                             │
+   ▼ [Post Final GRN]            ▼ [Close PO]
+(Fully Received)              (Closed)
+```
+
+### 4. Goods Receiving (GRN) State Machine
+```
+   [PO in 'Sent' or 'Partially Received']
+                    │
+                    ▼
+          [Create Goods Receipt]
+                    │
+                    ▼
+                 (Draft) ───────────────► [Soft Delete Draft]
+                    │
+                    ▼ [Post GRN (Locked / Immutable)]
+                 (Posted)
+                    │
+                    ▼
+      [Recalculate PO Fulfillment]
+         ├─ Partial Items Accepted  ──► Updates PO to 'Partially Received'
+         └─ All Items 100% Accepted ──► Updates PO to 'Fully Received'
 ```
 
 ---
@@ -106,6 +174,12 @@ C:\xampp\htdocs\procurement-mgt\
 
    # 3. Import Phase 03 Suppliers & Quotations Schema
    Get-Content "C:\xampp\htdocs\procurement-mgt\database\03_suppliers_quotations_schema.sql" | & "C:\xampp\mysql\bin\mysql.exe" -u root procurement_mgt
+
+   # 4. Import Phase 04 Purchase Orders Schema
+   Get-Content "C:\xampp\htdocs\procurement-mgt\database\04_purchase_orders_schema.sql" | & "C:\xampp\mysql\bin\mysql.exe" -u root procurement_mgt
+
+   # 5. Import Phase 05 Goods Receiving Schema
+   Get-Content "C:\xampp\htdocs\procurement-mgt\database\05_goods_receiving_schema.sql" | & "C:\xampp\mysql\bin\mysql.exe" -u root procurement_mgt
    ```
 
 ### 3. Verify Database Configuration
@@ -163,6 +237,8 @@ procurement-mgt/
 │   ├── 01_auth_schema.sql
 │   ├── 02_purchase_requests_schema.sql
 │   ├── 03_suppliers_quotations_schema.sql
+│   ├── 04_purchase_orders_schema.sql
+│   ├── 05_goods_receiving_schema.sql
 │   └── README.md
 │
 ├── includes/
@@ -182,6 +258,9 @@ procurement-mgt/
 │   │   └── index.php
 │   ├── profile/
 │   ├── purchase_requests/
+│   ├── suppliers/
+│   ├── quotations/
+│   ├── purchase_orders/
 │   │   ├── index.php
 │   │   ├── create.php
 │   │   ├── store.php
@@ -192,9 +271,11 @@ procurement-mgt/
 │   │   ├── submit.php
 │   │   ├── approve.php
 │   │   ├── reject.php
+│   │   ├── send.php
 │   │   ├── cancel.php
+│   │   ├── print.php
 │   │   └── history.php
-│   ├── suppliers/
+│   ├── goods_receiving/
 │   │   ├── index.php
 │   │   ├── create.php
 │   │   ├── store.php
@@ -202,21 +283,8 @@ procurement-mgt/
 │   │   ├── edit.php
 │   │   ├── update.php
 │   │   ├── delete.php
-│   │   ├── store-contact.php
-│   │   └── delete-contact.php
-│   ├── quotations/
-│   │   ├── index.php
-│   │   ├── create.php
-│   │   ├── store.php
-│   │   ├── view.php
-│   │   ├── edit.php
-│   │   ├── update.php
-│   │   ├── delete.php
-│   │   ├── submit.php
-│   │   ├── review.php
-│   │   ├── select.php
-│   │   ├── reject.php
-│   │   ├── compare.php
+│   │   ├── post.php
+│   │   ├── print.php
 │   │   └── history.php
 │   └── users/
 │       └── index.php

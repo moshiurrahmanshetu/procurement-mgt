@@ -75,6 +75,17 @@ function validateCsrfToken(?string $token = null): bool
 }
 
 /**
+ * Alias for validateCsrfToken.
+ *
+ * @param string|null $token
+ * @return bool
+ */
+function verifyCsrfToken(?string $token = null): bool
+{
+    return validateCsrfToken($token);
+}
+
+/**
  * Verifies CSRF for state-changing requests and aborts on failure.
  *
  * @param string|null $redirectUrl Optional URL to redirect to on failure
