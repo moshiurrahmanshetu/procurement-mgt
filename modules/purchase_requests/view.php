@@ -97,6 +97,23 @@ try {
     error_log('Fetch PR Quotations Error: ' . $e->getMessage());
 }
 
+// 6. Fetch Associated Purchase Orders (Phase 04 Integration)
+$prPurchaseOrders = [];
+try {
+    $poStmt = $db->prepare("
+        SELECT po.*, s.name AS supplier_name, s.supplier_code, q.quotation_no
+        FROM purchase_orders po
+        JOIN suppliers s ON s.id = po.supplier_id
+        JOIN quotations q ON q.id = po.quotation_id
+        WHERE po.purchase_request_id = :pr_id AND po.deleted_at IS NULL
+        ORDER BY po.id DESC
+    ");
+    $poStmt->execute([':pr_id' => $id]);
+    $prPurchaseOrders = $poStmt->fetchAll();
+} catch (Exception $e) {
+    error_log('Fetch PR Purchase Orders Error: ' . $e->getMessage());
+}
+
 $pageTitle = 'Request ' . $pr['request_no'];
 $pageSubtitle = 'Requisition Details & Approval Workflow';
 $activeNav = 'purchase_requests';
@@ -408,6 +425,64 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
                             </table>
                         </div>
                     <?php endif; ?>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <!-- Associated Purchase Orders Section (Phase 04 Integration) -->
+        <?php if (!empty($prPurchaseOrders)): ?>
+            <div class="card-cms mb-4">
+                <div class="card-cms-header">
+                    <h3 class="card-cms-title">
+                        <i class="bi bi-file-earmark-check-fill text-primary"></i>
+                        <span>Generated Purchase Orders</span>
+                    </h3>
+                    <span class="badge bg-light text-dark border"><?= count($prPurchaseOrders) ?> order(s)</span>
+                </div>
+                <div class="card-cms-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-cms align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>PO Number</th>
+                                    <th>Vendor Supplier</th>
+                                    <th>PO Date</th>
+                                    <th class="text-end">Total Amount</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($prPurchaseOrders as $po): ?>
+                                    <tr>
+                                        <td>
+                                            <a href="<?= url('modules/purchase_orders/view.php?id=' . $po['id']) ?>" class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace text-decoration-none py-1 px-2">
+                                                <?= e($po['po_no']) ?>
+                                            </a>
+                                        </td>
+                                        <td>
+                                            <div class="fw-semibold text-dark small"><?= e($po['supplier_name']) ?></div>
+                                            <span class="text-muted small font-monospace"><?= e($po['supplier_code']) ?></span>
+                                        </td>
+                                        <td class="small text-muted font-monospace">
+                                            <?= formatDate($po['po_date'], 'd M Y') ?>
+                                        </td>
+                                        <td class="text-end font-monospace fw-bold text-dark small">
+                                            <?= formatCurrency($po['grand_total']) ?>
+                                        </td>
+                                        <td class="text-center">
+                                            <?= getPoStatusBadge($po['status']) ?>
+                                        </td>
+                                        <td class="text-end">
+                                            <a href="<?= url('modules/purchase_orders/view.php?id=' . $po['id']) ?>" class="btn btn-outline-secondary btn-sm">
+                                                <i class="bi bi-eye"></i> View
+                                            </a>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         <?php endif; ?>

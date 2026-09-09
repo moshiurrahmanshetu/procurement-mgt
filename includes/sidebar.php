@@ -66,6 +66,12 @@ $isAdmin = userHasRole('administrator');
                     <span>Quotations</span>
                 </a>
             </li>
+            <li class="nav-item">
+                <a href="<?= url('modules/purchase_orders/index.php') ?>" class="nav-link <?= ($activeNav === 'purchase_orders') ? 'active' : '' ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Purchase Orders">
+                    <i class="bi bi-file-earmark-check-fill"></i>
+                    <span>Purchase Orders</span>
+                </a>
+            </li>
         </ul>
 
         <?php if ($isAdmin): ?>

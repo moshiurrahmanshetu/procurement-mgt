@@ -103,6 +103,21 @@ try {
     error_log('Error fetching quotation history: ' . $e->getMessage());
 }
 
+// 4. Fetch Linked Purchase Order (Phase 04 Integration)
+$linkedPo = null;
+try {
+    $poStmt = $db->prepare("
+        SELECT id, po_no, status, grand_total, created_at, sent_at
+        FROM purchase_orders
+        WHERE quotation_id = :qid AND deleted_at IS NULL
+        LIMIT 1
+    ");
+    $poStmt->execute([':qid' => $quotationId]);
+    $linkedPo = $poStmt->fetch();
+} catch (Exception $e) {
+    error_log('Error fetching linked PO: ' . $e->getMessage());
+}
+
 include dirname(__DIR__, 2) . '/includes/header.php';
 ?>
 
@@ -165,15 +180,30 @@ include dirname(__DIR__, 2) . '/includes/header.php';
 
     <!-- Status Specific Hero Banners -->
     <?php if ($quotation['status'] === 'selected'): ?>
-        <div class="alert alert-success border-success-subtle shadow-sm d-flex align-items-center gap-3 p-3 rounded-3 mb-4">
-            <div class="bg-success text-white p-3 rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
-                <i class="bi bi-trophy-fill fs-4"></i>
+        <div class="alert alert-success border-success-subtle shadow-sm d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 p-3 rounded-3 mb-4">
+            <div class="d-flex align-items-center gap-3">
+                <div class="bg-success text-white p-3 rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                    <i class="bi bi-trophy-fill fs-4"></i>
+                </div>
+                <div>
+                    <h5 class="alert-heading fw-bold mb-1">Winning Quotation Awarded</h5>
+                    <p class="mb-0 small text-success-emphasis">
+                        This quotation has been officially awarded and selected as the winning bid for Purchase Request <strong><?= e($quotation['request_no']) ?></strong>.
+                    </p>
+                </div>
             </div>
             <div>
-                <h5 class="alert-heading fw-bold mb-1">Winning Quotation Awarded</h5>
-                <p class="mb-0 small text-success-emphasis">
-                    This quotation has been officially awarded and selected as the winning bid for Purchase Request <strong><?= e($quotation['request_no']) ?></strong>. All other competing bids have been closed.
-                </p>
+                <?php if ($linkedPo): ?>
+                    <a href="<?= url('modules/purchase_orders/view.php?id=' . $linkedPo['id']) ?>" class="btn btn-success d-inline-flex align-items-center gap-2 shadow-sm">
+                        <i class="bi bi-file-earmark-check-fill"></i>
+                        <span>View PO: <?= e($linkedPo['po_no']) ?></span>
+                    </a>
+                <?php elseif ($isAdmin || $isOfficer): ?>
+                    <a href="<?= url('modules/purchase_orders/create.php?quotation_id=' . $quotation['id']) ?>" class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm">
+                        <i class="bi bi-file-earmark-plus-fill"></i>
+                        <span>Generate Purchase Order</span>
+                    </a>
+                <?php endif; ?>
             </div>
         </div>
     <?php elseif ($quotation['status'] === 'rejected'): ?>

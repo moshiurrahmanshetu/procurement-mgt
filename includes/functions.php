@@ -341,3 +341,33 @@ function getSupplierStatusBadge(string $status): string
         htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8')
     );
 }
+
+/**
+ * Returns a styled Bootstrap badge for purchase order statuses.
+ *
+ * @param string $status
+ * @return string
+ */
+function getPoStatusBadge(string $status): string
+{
+    $statusMap = [
+        'draft'              => ['class' => 'bg-secondary-subtle text-secondary border border-secondary-subtle', 'icon' => 'bi-file-earmark', 'label' => 'Draft'],
+        'pending_approval'   => ['class' => 'bg-warning-subtle text-warning-emphasis border border-warning-subtle', 'icon' => 'bi-hourglass-split', 'label' => 'Pending Approval'],
+        'approved'           => ['class' => 'bg-success-subtle text-success border border-success-subtle', 'icon' => 'bi-check-circle-fill', 'label' => 'Approved'],
+        'sent'               => ['class' => 'bg-info-subtle text-info-emphasis border border-info-subtle', 'icon' => 'bi-send-check-fill', 'label' => 'Sent to Supplier'],
+        'partially_received' => ['class' => 'bg-primary-subtle text-primary border border-primary-subtle', 'icon' => 'bi-box-seam', 'label' => 'Partially Received'],
+        'fully_received'     => ['class' => 'bg-success text-white', 'icon' => 'bi-box2-fill', 'label' => 'Fully Received'],
+        'cancelled'          => ['class' => 'bg-danger-subtle text-danger border border-danger-subtle', 'icon' => 'bi-x-circle-fill', 'label' => 'Cancelled'],
+        'closed'             => ['class' => 'bg-dark-subtle text-dark border border-dark-subtle', 'icon' => 'bi-lock-fill', 'label' => 'Closed']
+    ];
+
+    $item = $statusMap[$status] ?? ['class' => 'bg-light text-dark border', 'icon' => 'bi-circle', 'label' => ucfirst(str_replace('_', ' ', $status))];
+
+    return sprintf(
+        '<span class="badge %s px-2 py-1 small fw-semibold d-inline-flex align-items-center gap-1"><i class="bi %s"></i> %s</span>',
+        $item['class'],
+        $item['icon'],
+        htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8')
+    );
+}
+

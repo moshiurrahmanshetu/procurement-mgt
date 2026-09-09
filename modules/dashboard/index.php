@@ -127,7 +127,48 @@ try {
     error_log('Dashboard Phase 03 Query Error: ' . $e->getMessage());
 }
 
-// 4. Fetch Recent Activity Logs
+// 4. Fetch Phase 04 Purchase Order Summary Metrics
+$poStats = [
+    'total'            => 0,
+    'draft'            => 0,
+    'pending_approval' => 0,
+    'approved'         => 0,
+    'sent'             => 0,
+    'total_value'      => 0.00
+];
+$recentOrders = [];
+
+try {
+    $poStatStmt = $db->query("
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) AS draft,
+            SUM(CASE WHEN status = 'pending_approval' THEN 1 ELSE 0 END) AS pending_approval,
+            SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved,
+            SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
+            SUM(CASE WHEN status IN ('approved', 'sent') THEN grand_total ELSE 0 END) AS total_value
+        FROM purchase_orders
+        WHERE deleted_at IS NULL
+    ");
+    $poStats = $poStatStmt->fetch() ?: $poStats;
+
+    // Fetch Top 5 Recent POs
+    $roStmt = $db->query("
+        SELECT po.*, s.name AS supplier_name, s.supplier_code, q.quotation_no, pr.request_no
+        FROM purchase_orders po
+        JOIN suppliers s ON s.id = po.supplier_id
+        JOIN quotations q ON q.id = po.quotation_id
+        JOIN purchase_requests pr ON pr.id = po.purchase_request_id
+        WHERE po.deleted_at IS NULL
+        ORDER BY po.id DESC
+        LIMIT 5
+    ");
+    $recentOrders = $roStmt->fetchAll();
+} catch (Exception $e) {
+    error_log('Dashboard Phase 04 PO Query Error: ' . $e->getMessage());
+}
+
+// 5. Fetch Recent Activity Logs
 $activityLogs = [];
 try {
     $actStmt = $db->prepare("
@@ -153,7 +194,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
             <div class="col-lg-7">
                 <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
                     <span class="badge bg-primary px-3 py-2 fs-7 font-monospace fw-semibold">
-                        <i class="bi bi-building-check me-1"></i> Phase 03: Suppliers &amp; Quotations
+                        <i class="bi bi-file-earmark-check-fill me-1"></i> Phase 04: Purchase Order Management
                     </span>
                     <span class="badge bg-success bg-opacity-75 px-3 py-2 fs-7">
                         <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i> <?= ucfirst(e($user['status'])) ?>
@@ -170,6 +211,9 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
                     <i class="bi bi-plus-lg me-1"></i> New Request
                 </a>
                 <?php if ($canViewAll): ?>
+                    <a href="<?= url('modules/purchase_orders/create.php') ?>" class="btn btn-info btn-sm fw-semibold px-3 py-2 shadow-sm text-dark">
+                        <i class="bi bi-file-earmark-plus-fill me-1"></i> Issue PO
+                    </a>
                     <a href="<?= url('modules/quotations/create.php') ?>" class="btn btn-success btn-sm fw-semibold px-3 py-2 shadow-sm">
                         <i class="bi bi-receipt me-1"></i> Record Quote
                     </a>
@@ -318,6 +362,61 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
     </div>
 </div>
 
+<!-- Purchase Order Logistics & Fulfillment Metrics (Phase 04) -->
+<div class="row g-3 mb-4">
+    <!-- Total Purchase Orders -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card border-start border-primary border-4">
+            <div class="stat-icon" style="width: 42px; height: 42px; font-size: 1.25rem; background-color: #dbeafe; color: #1d4ed8;">
+                <i class="bi bi-file-earmark-check-fill"></i>
+            </div>
+            <div>
+                <div class="stat-label" style="font-size: 0.75rem;">Total Purchase Orders</div>
+                <h4 class="stat-value fs-5 text-dark"><?= number_format((int)$poStats['total']) ?></h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- POs Pending Approval -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card border-start border-warning border-4">
+            <div class="stat-icon warning" style="width: 42px; height: 42px; font-size: 1.25rem;">
+                <i class="bi bi-hourglass-split"></i>
+            </div>
+            <div>
+                <div class="stat-label" style="font-size: 0.75rem;">POs Pending Approval</div>
+                <h4 class="stat-value fs-5 text-warning-emphasis"><?= number_format((int)$poStats['pending_approval']) ?></h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Approved POs -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card border-start border-info border-4">
+            <div class="stat-icon" style="width: 42px; height: 42px; font-size: 1.25rem; background-color: #e0f2fe; color: #0284c7;">
+                <i class="bi bi-check2-all"></i>
+            </div>
+            <div>
+                <div class="stat-label" style="font-size: 0.75rem;">Approved (Ready)</div>
+                <h4 class="stat-value fs-5 text-info"><?= number_format((int)$poStats['approved']) ?></h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dispatched / Sent Value -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card border-start border-success border-4">
+            <div class="stat-icon success" style="width: 42px; height: 42px; font-size: 1.25rem;">
+                <i class="bi bi-send-check-fill"></i>
+            </div>
+            <div>
+                <div class="stat-label" style="font-size: 0.75rem;">Sent to Suppliers (<?= number_format((int)$poStats['sent']) ?>)</div>
+                <h4 class="stat-value fs-5 text-success font-monospace"><?= formatCurrency($poStats['total_value']) ?></h4>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Main Content Grid: Recent PRs & System Audit -->
 <div class="row g-4 mb-4">
     <!-- Recent Purchase Requests Table -->
@@ -430,6 +529,77 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
                 <?php endif; ?>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Recent Purchase Orders Card (Phase 04) -->
+<div class="card-cms mb-4">
+    <div class="card-cms-header d-flex justify-content-between align-items-center">
+        <h3 class="card-cms-title">
+            <i class="bi bi-file-earmark-check-fill text-primary"></i>
+            <span>Recent Purchase Orders</span>
+        </h3>
+        <a href="<?= url('modules/purchase_orders/index.php') ?>" class="btn btn-outline-secondary btn-sm">
+            View All Orders <i class="bi bi-arrow-right ms-1"></i>
+        </a>
+    </div>
+    <div class="card-cms-body p-0">
+        <?php if (!empty($recentOrders)): ?>
+            <div class="table-responsive">
+                <table class="table table-cms align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>PO Number</th>
+                            <th>Requisition</th>
+                            <th>Vendor Supplier</th>
+                            <th>PO Date</th>
+                            <th class="text-end">Total Amount</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($recentOrders as $ro): ?>
+                            <tr>
+                                <td>
+                                    <a href="<?= url('modules/purchase_orders/view.php?id=' . $ro['id']) ?>" class="fw-bold font-monospace text-primary text-decoration-none">
+                                        <?= e($ro['po_no']) ?>
+                                    </a>
+                                </td>
+                                <td>
+                                    <a href="<?= url('modules/purchase_requests/view.php?id=' . $ro['purchase_request_id']) ?>" class="text-dark fw-semibold text-decoration-none small font-monospace">
+                                        <?= e($ro['request_no']) ?>
+                                    </a>
+                                </td>
+                                <td>
+                                    <div class="fw-medium text-dark small"><?= e($ro['supplier_name']) ?></div>
+                                    <span class="text-muted font-monospace small" style="font-size: 0.6875rem;"><?= e($ro['supplier_code']) ?></span>
+                                </td>
+                                <td class="small text-muted font-monospace">
+                                    <?= formatDate($ro['po_date'], 'd M Y') ?>
+                                </td>
+                                <td class="text-end font-monospace fw-bold text-dark small">
+                                    <?= formatCurrency($ro['grand_total']) ?>
+                                </td>
+                                <td class="text-center">
+                                    <?= getPoStatusBadge($ro['status']) ?>
+                                </td>
+                                <td class="text-end">
+                                    <a href="<?= url('modules/purchase_orders/view.php?id=' . $ro['id']) ?>" class="btn btn-outline-secondary btn-sm" title="View Order">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php else: ?>
+            <div class="text-center py-4 text-muted small">
+                <i class="bi bi-file-earmark-x fs-2 text-secondary d-block mb-1"></i>
+                No purchase orders generated yet.
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 
