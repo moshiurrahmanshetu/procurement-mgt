@@ -51,6 +51,10 @@ if (!defined('AVATAR_UPLOAD_DIR')) {
     define('AVATAR_UPLOAD_DIR', UPLOAD_DIR . 'avatars' . DIRECTORY_SEPARATOR);
 }
 
+if (!defined('LOGO_UPLOAD_DIR')) {
+    define('LOGO_UPLOAD_DIR', UPLOAD_DIR . 'logos' . DIRECTORY_SEPARATOR);
+}
+
 // Avatar Upload Limits
 if (!defined('AVATAR_MAX_SIZE')) {
     define('AVATAR_MAX_SIZE', 2 * 1024 * 1024); // 2 MB
@@ -70,6 +74,30 @@ if (!defined('ALLOWED_AVATAR_EXTS')) {
         'jpeg',
         'png',
         'webp'
+    ]);
+}
+
+// Logo Upload Limits
+if (!defined('LOGO_MAX_SIZE')) {
+    define('LOGO_MAX_SIZE', 2 * 1024 * 1024); // 2 MB
+}
+
+if (!defined('ALLOWED_LOGO_MIMES')) {
+    define('ALLOWED_LOGO_MIMES', [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/svg+xml'
+    ]);
+}
+
+if (!defined('ALLOWED_LOGO_EXTS')) {
+    define('ALLOWED_LOGO_EXTS', [
+        'jpg',
+        'jpeg',
+        'png',
+        'webp',
+        'svg'
     ]);
 }
 

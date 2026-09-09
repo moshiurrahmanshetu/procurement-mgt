@@ -8,6 +8,7 @@ require_once __DIR__ . '/init.php';
 
 $pageTitle = $pageTitle ?? 'Dashboard';
 $currentUser = currentUser();
+$companyName = getSetting('company_name', APP_NAME);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -15,7 +16,7 @@ $currentUser = currentUser();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title><?= e($pageTitle) ?> | <?= e(APP_NAME) ?></title>
+    <title><?= e($pageTitle) ?> | <?= e($companyName) ?></title>
 
     <!-- Vendor CSS -->
     <link rel="stylesheet" href="<?= asset('css/bootstrap.min.css') ?>">

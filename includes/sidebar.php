@@ -1,7 +1,7 @@
 <?php
 /**
  * Master Sidebar Component
- * Procurement Management CMS
+ * Procurement Management CMS - Phase 06
  */
 
 require_once __DIR__ . '/init.php';
@@ -9,6 +9,9 @@ require_once __DIR__ . '/init.php';
 $activeNav = $activeNav ?? '';
 $user = currentUser();
 $isAdmin = userHasRole('administrator');
+$isManager = userHasRole('manager');
+$isOfficer = userHasRole('procurement-officer');
+$canViewSystem = $isAdmin || $isManager;
 ?>
 <aside class="app-sidebar">
     <!-- Brand Logo -->
@@ -80,16 +83,45 @@ $isAdmin = userHasRole('administrator');
             </li>
         </ul>
 
-        <?php if ($isAdmin): ?>
+        <!-- Reports Section -->
+        <div class="nav-section-title mt-3">Reports</div>
+        <ul class="sidebar-menu">
+            <li class="nav-item">
+                <a href="<?= url('modules/reports/index.php') ?>" class="nav-link <?= ($activeNav === 'reports') ? 'active' : '' ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Reports Hub">
+                    <i class="bi bi-bar-chart-line-fill"></i>
+                    <span>Reports</span>
+                </a>
+            </li>
+        </ul>
+
+        <?php if ($canViewSystem): ?>
             <!-- System Administration -->
             <div class="nav-section-title mt-3">System</div>
             <ul class="sidebar-menu">
+                <?php if ($isAdmin): ?>
+                    <li class="nav-item">
+                        <a href="<?= url('modules/users/index.php') ?>" class="nav-link <?= ($activeNav === 'users') ? 'active' : '' ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="User Management">
+                            <i class="bi bi-people-fill"></i>
+                            <span>Users</span>
+                        </a>
+                    </li>
+                <?php endif; ?>
+
                 <li class="nav-item">
-                    <a href="<?= url('modules/users/index.php') ?>" class="nav-link <?= ($activeNav === 'users') ? 'active' : '' ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Users">
-                        <i class="bi bi-people-fill"></i>
-                        <span>Users</span>
+                    <a href="<?= url('modules/activity_logs/index.php') ?>" class="nav-link <?= ($activeNav === 'activity_logs') ? 'active' : '' ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Activity Logs">
+                        <i class="bi bi-clock-history"></i>
+                        <span>Activity Logs</span>
                     </a>
                 </li>
+
+                <?php if ($isAdmin): ?>
+                    <li class="nav-item">
+                        <a href="<?= url('modules/settings/index.php') ?>" class="nav-link <?= ($activeNav === 'settings') ? 'active' : '' ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="System Settings">
+                            <i class="bi bi-gear-fill"></i>
+                            <span>Settings</span>
+                        </a>
+                    </li>
+                <?php endif; ?>
             </ul>
         <?php endif; ?>
 

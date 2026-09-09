@@ -193,16 +193,20 @@ function renderAvatar(?array $user, int $size = 40, string $classes = ''): strin
 }
 
 /**
- * Formats a timestamp/datetime string safely.
+ * Formats a timestamp/datetime string safely using system date format setting.
  *
  * @param string|null $date
- * @param string $format
+ * @param string|null $format
  * @return string
  */
-function formatDate(?string $date, string $format = 'd M Y, h:i A'): string
+function formatDate(?string $date, ?string $format = null): string
 {
-    if (empty($date) || $date === '0000-00-00 00:00:00') {
+    if (empty($date) || $date === '0000-00-00 00:00:00' || $date === '0000-00-00') {
         return 'Never';
+    }
+
+    if ($format === null) {
+        $format = getSetting('date_format', 'd M Y, h:i A');
     }
 
     try {
@@ -228,15 +232,138 @@ function sanitizeInput($data): string
 }
 
 /**
- * Formats a monetary amount into standard currency string.
+ * Formats a monetary amount into standard currency string using system currency setting.
  *
  * @param mixed $amount
- * @param string $symbol
+ * @param string|null $symbol
  * @return string
  */
-function formatCurrency($amount, string $symbol = '$'): string
+function formatCurrency($amount, ?string $symbol = null): string
 {
+    if ($symbol === null) {
+        $symbol = getSetting('currency', '$');
+    }
     return $symbol . number_format((float)$amount, 2);
+}
+
+/**
+ * Retrieves a configuration setting value from the settings table.
+ * Caches loaded settings in-memory to prevent repeated database queries.
+ *
+ * @param string $key
+ * @param mixed $default
+ * @param bool $forceRefresh
+ * @return mixed
+ */
+function getSetting(string $key, $default = null, bool $forceRefresh = false)
+{
+    if (!isset($GLOBALS['__system_settings_cache']) || $forceRefresh) {
+        $GLOBALS['__system_settings_cache'] = [];
+        try {
+            $db = getDb();
+            $stmt = $db->query("SELECT setting_key, setting_value FROM settings");
+            if ($stmt) {
+                while ($row = $stmt->fetch()) {
+                    $GLOBALS['__system_settings_cache'][$row['setting_key']] = $row['setting_value'];
+                }
+            }
+        } catch (Exception $e) {
+            error_log('Error loading system settings: ' . $e->getMessage());
+        }
+    }
+
+    return $GLOBALS['__system_settings_cache'][$key] ?? $default;
+}
+
+/**
+ * Retrieves all configuration settings as a key-value associative array.
+ *
+ * @return array
+ */
+function getAllSettings(): array
+{
+    $settings = [];
+    try {
+        $db = getDb();
+        $stmt = $db->query("SELECT * FROM settings ORDER BY id ASC");
+        if ($stmt) {
+            while ($row = $stmt->fetch()) {
+                $settings[$row['setting_key']] = $row;
+            }
+        }
+    } catch (Exception $e) {
+        error_log('Error fetching all settings: ' . $e->getMessage());
+    }
+    return $settings;
+}
+
+/**
+ * Updates or inserts a configuration setting in the database.
+ *
+ * @param string $key
+ * @param mixed $value
+ * @param string $type
+ * @return bool
+ */
+function updateSetting(string $key, $value, string $type = 'text'): bool
+{
+    try {
+        $db = getDb();
+        $stmt = $db->prepare("
+            INSERT INTO settings (setting_key, setting_value, setting_type, updated_at)
+            VALUES (:k1, :v1, :t1, NOW())
+            ON DUPLICATE KEY UPDATE setting_value = :v2, updated_at = NOW()
+        ");
+        $result = $stmt->execute([
+            ':k1' => $key,
+            ':v1' => $value,
+            ':t1' => $type,
+            ':v2' => $value
+        ]);
+        if ($result) {
+            if (!isset($GLOBALS['__system_settings_cache'])) {
+                $GLOBALS['__system_settings_cache'] = [];
+            }
+            $GLOBALS['__system_settings_cache'][$key] = $value;
+        }
+        return $result;
+    } catch (Exception $e) {
+        error_log('Error updating setting ' . $key . ': ' . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Renders company logo image tag or styled fallback text.
+ *
+ * @param int $maxHeight
+ * @param string $classes
+ * @return string
+ */
+function renderCompanyLogo(int $maxHeight = 36, string $classes = ''): string
+{
+    $logoFile = getSetting('company_logo');
+    $companyName = getSetting('company_name', APP_NAME);
+
+    if (!empty($logoFile)) {
+        $filePath = LOGO_UPLOAD_DIR . $logoFile;
+        if (file_exists($filePath)) {
+            $logoUrl = BASE_URL . 'assets/uploads/logos/' . $logoFile;
+            return sprintf(
+                '<img src="%s" alt="%s" class="%s" style="max-height:%dpx;max-width:180px;object-fit:contain;">',
+                htmlspecialchars($logoUrl, ENT_QUOTES, 'UTF-8'),
+                htmlspecialchars($companyName, ENT_QUOTES, 'UTF-8'),
+                htmlspecialchars($classes, ENT_QUOTES, 'UTF-8'),
+                $maxHeight
+            );
+        }
+    }
+
+    return sprintf(
+        '<span class="fw-bold text-dark %s">%s</span>',
+        htmlspecialchars($classes, ENT_QUOTES, 'UTF-8'),
+        htmlspecialchars($companyName, ENT_QUOTES, 'UTF-8')
+    );
 }
 
 /**
