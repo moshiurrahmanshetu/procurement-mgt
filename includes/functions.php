@@ -226,3 +226,67 @@ function sanitizeInput($data): string
     }
     return trim((string)$data);
 }
+
+/**
+ * Formats a monetary amount into standard currency string.
+ *
+ * @param mixed $amount
+ * @param string $symbol
+ * @return string
+ */
+function formatCurrency($amount, string $symbol = '$'): string
+{
+    return $symbol . number_format((float)$amount, 2);
+}
+
+/**
+ * Returns a styled Bootstrap badge for purchase request statuses.
+ *
+ * @param string $status
+ * @return string
+ */
+function getStatusBadge(string $status): string
+{
+    $statusMap = [
+        'draft'            => ['class' => 'bg-secondary-subtle text-secondary border border-secondary-subtle', 'icon' => 'bi-file-earmark', 'label' => 'Draft'],
+        'pending_approval' => ['class' => 'bg-warning-subtle text-warning-emphasis border border-warning-subtle', 'icon' => 'bi-hourglass-split', 'label' => 'Pending Approval'],
+        'approved'         => ['class' => 'bg-success-subtle text-success border border-success-subtle', 'icon' => 'bi-check-circle-fill', 'label' => 'Approved'],
+        'rejected'         => ['class' => 'bg-danger-subtle text-danger border border-danger-subtle', 'icon' => 'bi-x-circle-fill', 'label' => 'Rejected'],
+        'cancelled'        => ['class' => 'bg-dark-subtle text-dark border border-dark-subtle', 'icon' => 'bi-slash-circle', 'label' => 'Cancelled'],
+        'completed'        => ['class' => 'bg-primary-subtle text-primary border border-primary-subtle', 'icon' => 'bi-patch-check-fill', 'label' => 'Completed']
+    ];
+
+    $item = $statusMap[$status] ?? ['class' => 'bg-light text-dark border', 'icon' => 'bi-circle', 'label' => ucfirst(str_replace('_', ' ', $status))];
+
+    return sprintf(
+        '<span class="badge %s px-2 py-1 small fw-semibold d-inline-flex align-items-center gap-1"><i class="bi %s"></i> %s</span>',
+        $item['class'],
+        $item['icon'],
+        htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8')
+    );
+}
+
+/**
+ * Returns a styled Bootstrap badge for purchase request priorities.
+ *
+ * @param string $priority
+ * @return string
+ */
+function getPriorityBadge(string $priority): string
+{
+    $priorityMap = [
+        'low'    => ['class' => 'bg-secondary-subtle text-secondary border border-secondary-subtle', 'label' => 'Low'],
+        'medium' => ['class' => 'bg-info-subtle text-info-emphasis border border-info-subtle', 'label' => 'Medium'],
+        'high'   => ['class' => 'bg-warning-subtle text-warning-emphasis border border-warning-subtle', 'label' => 'High'],
+        'urgent' => ['class' => 'bg-danger-subtle text-danger border border-danger-subtle', 'label' => 'Urgent']
+    ];
+
+    $item = $priorityMap[$priority] ?? ['class' => 'bg-light text-dark border', 'label' => ucfirst($priority)];
+
+    return sprintf(
+        '<span class="badge %s px-2 py-1 small fw-semibold">%s</span>',
+        $item['class'],
+        htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8')
+    );
+}
+

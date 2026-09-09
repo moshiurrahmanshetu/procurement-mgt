@@ -45,6 +45,17 @@ $isAdmin = userHasRole('administrator');
             </li>
         </ul>
 
+        <!-- Procurement Section -->
+        <div class="nav-section-title mt-3">Procurement</div>
+        <ul class="sidebar-menu">
+            <li class="nav-item">
+                <a href="<?= url('modules/purchase_requests/index.php') ?>" class="nav-link <?= ($activeNav === 'purchase_requests') ? 'active' : '' ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Purchase Requests">
+                    <i class="bi bi-cart-check-fill"></i>
+                    <span>Purchase Requests</span>
+                </a>
+            </li>
+        </ul>
+
         <?php if ($isAdmin): ?>
             <!-- System Administration -->
             <div class="nav-section-title mt-3">System</div>

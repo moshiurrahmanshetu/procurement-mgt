@@ -1,42 +1,106 @@
 <?php
 /**
  * Application Dashboard
- * Procurement Management CMS
+ * Procurement Management CMS - Phase 02
  */
 
 $pageTitle = 'Dashboard';
-$pageSubtitle = 'Overview and System Status';
+$pageSubtitle = 'Overview, Requisition Metrics, and Activity';
 $activeNav = 'dashboard';
 
 require_once dirname(__DIR__, 2) . '/includes/init.php';
 requireLogin();
 
 $user = currentUser();
+$userId = currentUserId();
 $db = getDb();
 
-// Fetch recent activity logs for current user or system
+$isAdmin = userHasRole('administrator');
+$isManager = userHasRole('manager');
+$isOfficer = userHasRole('procurement-officer');
+$canViewAll = $isAdmin || $isManager || $isOfficer;
+
+// 1. Fetch Purchase Request Statistics
+$prStats = [
+    'total'            => 0,
+    'draft'            => 0,
+    'pending_approval' => 0,
+    'approved'         => 0,
+    'rejected'         => 0,
+    'cancelled'        => 0
+];
+
+try {
+    $statWhere = "WHERE deleted_at IS NULL";
+    $statParams = [];
+
+    if (!$canViewAll) {
+        $statWhere .= " AND requested_by = :uid";
+        $statParams[':uid'] = $userId;
+    }
+
+    $statQuery = "
+        SELECT status, COUNT(*) as count 
+        FROM purchase_requests 
+        {$statWhere} 
+        GROUP BY status
+    ";
+    $stmt = $db->prepare($statQuery);
+    $stmt->execute($statParams);
+    $rows = $stmt->fetchAll();
+
+    foreach ($rows as $row) {
+        $s = $row['status'];
+        if (isset($prStats[$s])) {
+            $prStats[$s] = (int)$row['count'];
+        }
+        $prStats['total'] += (int)$row['count'];
+    }
+} catch (Exception $e) {
+    error_log('Dashboard PR Stats Error: ' . $e->getMessage());
+}
+
+// 2. Fetch Recent Purchase Requests (Top 5)
+$recentRequests = [];
+try {
+    $prWhere = "WHERE pr.deleted_at IS NULL";
+    $prParams = [];
+
+    if (!$canViewAll) {
+        $prWhere .= " AND pr.requested_by = :uid";
+        $prParams[':uid'] = $userId;
+    }
+
+    $prQuery = "
+        SELECT pr.*, d.name as department_name, d.code as department_code, u.full_name as requester_name
+        FROM purchase_requests pr
+        LEFT JOIN departments d ON pr.department_id = d.id
+        LEFT JOIN users u ON pr.requested_by = u.id
+        {$prWhere}
+        ORDER BY pr.id DESC
+        LIMIT 5
+    ";
+    $prStmt = $db->prepare($prQuery);
+    $prStmt->execute($prParams);
+    $recentRequests = $prStmt->fetchAll();
+} catch (Exception $e) {
+    error_log('Dashboard Recent PRs Error: ' . $e->getMessage());
+}
+
+// 3. Fetch Recent Activity Logs
 $activityLogs = [];
 try {
-    $stmt = $db->prepare("
+    $actStmt = $db->prepare("
         SELECT a.*, u.full_name, u.username 
         FROM activity_logs a
         LEFT JOIN users u ON a.user_id = u.id
         ORDER BY a.created_at DESC 
-        LIMIT 8
+        LIMIT 6
     ");
-    $stmt->execute();
-    $activityLogs = $stmt->fetchAll();
+    $actStmt->execute();
+    $activityLogs = $actStmt->fetchAll();
 } catch (Exception $e) {
     error_log('Dashboard Activity Log Query Error: ' . $e->getMessage());
-}
-
-// Fetch total registered users count for quick status metric
-$totalUsersCount = 0;
-try {
-    $stmt = $db->query("SELECT COUNT(*) as total FROM users WHERE deleted_at IS NULL");
-    $totalUsersCount = (int)$stmt->fetch()['total'];
-} catch (Exception $e) {
-    $totalUsersCount = 1;
 }
 
 require_once dirname(__DIR__, 2) . '/includes/header.php';
@@ -49,7 +113,7 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
             <div class="col-lg-8">
                 <div class="d-flex align-items-center gap-3 mb-2">
                     <span class="badge bg-primary px-3 py-2 fs-7 font-monospace fw-semibold">
-                        <i class="bi bi-shield-check me-1"></i> Phase 01 Active
+                        <i class="bi bi-cart-check-fill me-1"></i> Phase 02: PR Module
                     </span>
                     <span class="badge bg-success bg-opacity-75 px-3 py-2 fs-7">
                         <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i> <?= ucfirst(e($user['status'])) ?>
@@ -57,165 +121,162 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
                 </div>
                 <h2 class="fw-bold mb-1 text-white">Welcome back, <?= e($user['full_name']) ?>!</h2>
                 <p class="text-slate-300 mb-0 opacity-75 small">
-                    You are signed in as <strong class="text-white"><?= e($user['role_names'] ?? 'User') ?></strong>.
+                    Signed in as <strong class="text-white"><?= e($user['role_names'] ?? 'User') ?></strong> &bull;
                     Last logged in: <span class="text-white"><?= formatDate($user['last_login']) ?></span>
                 </p>
             </div>
             <div class="col-lg-4 text-lg-end mt-3 mt-lg-0">
+                <a href="<?= url('modules/purchase_requests/create.php') ?>" class="btn btn-primary btn-sm fw-semibold px-3 py-2 shadow-sm me-2">
+                    <i class="bi bi-plus-lg me-1"></i> New Request
+                </a>
                 <a href="<?= url('modules/profile/index.php') ?>" class="btn btn-light btn-sm fw-semibold px-3 py-2 shadow-sm">
-                    <i class="bi bi-person-gear me-1"></i> Manage Profile
+                    <i class="bi bi-person-gear me-1"></i> Profile
                 </a>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Key Metric / Status Cards -->
+<!-- Purchase Requisition Metrics Cards -->
 <div class="row g-3 mb-4">
-    <div class="col-sm-6 col-xl-3">
+    <!-- Total Requests -->
+    <div class="col-sm-6 col-xl-2">
         <div class="stat-card">
-            <div class="stat-icon primary">
-                <i class="bi bi-person-badge"></i>
+            <div class="stat-icon primary" style="width: 42px; height: 42px; font-size: 1.25rem;">
+                <i class="bi bi-cart3"></i>
             </div>
             <div>
-                <div class="stat-label">Assigned Role</div>
-                <h4 class="stat-value fs-6 text-primary"><?= e($user['role_names'] ?? 'Administrator') ?></h4>
+                <div class="stat-label" style="font-size: 0.75rem;">Total Requests</div>
+                <h4 class="stat-value fs-5"><?= number_format($prStats['total']) ?></h4>
             </div>
         </div>
     </div>
 
-    <div class="col-sm-6 col-xl-3">
+    <!-- Drafts -->
+    <div class="col-sm-6 col-xl-2">
         <div class="stat-card">
-            <div class="stat-icon success">
-                <i class="bi bi-shield-lock"></i>
+            <div class="stat-icon" style="width: 42px; height: 42px; font-size: 1.25rem; background-color: var(--surface-subtle); color: var(--text-muted);">
+                <i class="bi bi-file-earmark"></i>
             </div>
             <div>
-                <div class="stat-label">Account Status</div>
-                <h4 class="stat-value fs-6 text-success">
-                    <i class="bi bi-check-circle-fill me-1"></i> <?= ucfirst(e($user['status'])) ?>
-                </h4>
+                <div class="stat-label" style="font-size: 0.75rem;">Drafts</div>
+                <h4 class="stat-value fs-5 text-secondary"><?= number_format($prStats['draft']) ?></h4>
             </div>
         </div>
     </div>
 
-    <div class="col-sm-6 col-xl-3">
+    <!-- Pending Approval -->
+    <div class="col-sm-6 col-xl-2">
         <div class="stat-card">
-            <div class="stat-icon info">
-                <i class="bi bi-people"></i>
+            <div class="stat-icon warning" style="width: 42px; height: 42px; font-size: 1.25rem;">
+                <i class="bi bi-hourglass-split"></i>
             </div>
             <div>
-                <div class="stat-label">Active Users</div>
-                <h4 class="stat-value"><?= $totalUsersCount ?></h4>
+                <div class="stat-label" style="font-size: 0.75rem;">Pending Approval</div>
+                <h4 class="stat-value fs-5 text-warning-emphasis"><?= number_format($prStats['pending_approval']) ?></h4>
             </div>
         </div>
     </div>
 
-    <div class="col-sm-6 col-xl-3">
+    <!-- Approved -->
+    <div class="col-sm-6 col-xl-2">
         <div class="stat-card">
-            <div class="stat-icon warning">
-                <i class="bi bi-clock-history"></i>
+            <div class="stat-icon success" style="width: 42px; height: 42px; font-size: 1.25rem;">
+                <i class="bi bi-check-circle-fill"></i>
             </div>
             <div>
-                <div class="stat-label">Last Login</div>
-                <div class="small fw-semibold text-truncate" style="max-width: 140px;" title="<?= e(formatDate($user['last_login'])) ?>">
-                    <?= formatDate($user['last_login'], 'd M, h:i A') ?>
-                </div>
+                <div class="stat-label" style="font-size: 0.75rem;">Approved</div>
+                <h4 class="stat-value fs-5 text-success"><?= number_format($prStats['approved']) ?></h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rejected -->
+    <div class="col-sm-6 col-xl-2">
+        <div class="stat-card">
+            <div class="stat-icon" style="width: 42px; height: 42px; font-size: 1.25rem; background-color: var(--danger-bg); color: var(--danger);">
+                <i class="bi bi-x-circle-fill"></i>
+            </div>
+            <div>
+                <div class="stat-label" style="font-size: 0.75rem;">Rejected</div>
+                <h4 class="stat-value fs-5 text-danger"><?= number_format($prStats['rejected']) ?></h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cancelled -->
+    <div class="col-sm-6 col-xl-2">
+        <div class="stat-card">
+            <div class="stat-icon" style="width: 42px; height: 42px; font-size: 1.25rem; background-color: #f1f5f9; color: #475569;">
+                <i class="bi bi-slash-circle"></i>
+            </div>
+            <div>
+                <div class="stat-label" style="font-size: 0.75rem;">Cancelled</div>
+                <h4 class="stat-value fs-5 text-dark"><?= number_format($prStats['cancelled']) ?></h4>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Main Grid: System Setup Status & Recent Activity -->
+<!-- Main Content Grid: Recent PRs & System Audit -->
 <div class="row g-4">
-    <!-- Left Column: System Status Overview -->
-    <div class="col-lg-5">
+    <!-- Recent Purchase Requests Table -->
+    <div class="col-lg-8">
         <div class="card-cms h-100">
             <div class="card-cms-header">
                 <h3 class="card-cms-title">
-                    <i class="bi bi-hdd-network text-primary"></i>
-                    <span>System Foundation Status</span>
+                    <i class="bi bi-cart-check-fill text-primary"></i>
+                    <span>Recent Purchase Requests</span>
                 </h3>
-                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 small">Online</span>
-            </div>
-            <div class="card-cms-body">
-                <p class="text-muted small mb-3">
-                    Core Phase 01 architecture components status and system environment specs:
-                </p>
-
-                <ul class="list-group list-group-flush border rounded-3 overflow-hidden mb-3">
-                    <li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 small">
-                        <span class="text-muted"><i class="bi bi-database text-primary me-2"></i>Database (PDO)</span>
-                        <span class="fw-semibold text-success"><i class="bi bi-check-circle-fill me-1"></i>Connected (<?= e(DB_NAME) ?>)</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 small">
-                        <span class="text-muted"><i class="bi bi-code-square text-primary me-2"></i>PHP Version</span>
-                        <span class="fw-semibold text-dark"><?= phpversion() ?></span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 small">
-                        <span class="text-muted"><i class="bi bi-shield-check text-primary me-2"></i>CSRF Protection</span>
-                        <span class="fw-semibold text-success"><i class="bi bi-check-circle-fill me-1"></i>Active</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 small">
-                        <span class="text-muted"><i class="bi bi-person-check text-primary me-2"></i>Session Security</span>
-                        <span class="fw-semibold text-success"><i class="bi bi-check-circle-fill me-1"></i>Strict / HttpOnly</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 small">
-                        <span class="text-muted"><i class="bi bi-folder-check text-primary me-2"></i>Avatar Uploads</span>
-                        <span class="fw-semibold text-success"><i class="bi bi-check-circle-fill me-1"></i>Writable</span>
-                    </li>
-                </ul>
-
-                <div class="alert alert-info py-2 px-3 mb-0 small d-flex align-items-center">
-                    <i class="bi bi-info-circle-fill me-2 fs-6 flex-shrink-0"></i>
-                    <div>Phase 01 core complete. Procurement modules will be built in subsequent phases.</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Right Column: Recent Activity Logs -->
-    <div class="col-lg-7">
-        <div class="card-cms h-100">
-            <div class="card-cms-header">
-                <h3 class="card-cms-title">
-                    <i class="bi bi-activity text-primary"></i>
-                    <span>Recent Audit & Activity Trail</span>
-                </h3>
+                <a href="<?= url('modules/purchase_requests/index.php') ?>" class="btn btn-outline-secondary btn-sm">
+                    View All Requisitions <i class="bi bi-arrow-right ms-1"></i>
+                </a>
             </div>
             <div class="card-cms-body p-0">
-                <?php if (!empty($activityLogs)): ?>
+                <?php if (!empty($recentRequests)): ?>
                     <div class="table-responsive">
                         <table class="table table-cms align-middle mb-0">
                             <thead>
                                 <tr>
-                                    <th>Action</th>
-                                    <th>User</th>
-                                    <th>Description</th>
-                                    <th>IP Address</th>
-                                    <th>Timestamp</th>
+                                    <th>Request No</th>
+                                    <th>Department</th>
+                                    <th>Requested By</th>
+                                    <th>Priority</th>
+                                    <th class="text-end">Est. Total</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($activityLogs as $log): ?>
+                                <?php foreach ($recentRequests as $pr): ?>
                                     <tr>
                                         <td>
-                                            <span class="badge bg-secondary-subtle text-dark border px-2 py-1 small">
-                                                <?= e($log['action']) ?>
-                                            </span>
+                                            <a href="<?= url('modules/purchase_requests/view.php?id=' . $pr['id']) ?>" class="fw-bold font-monospace text-primary text-decoration-none">
+                                                <?= e($pr['request_no']) ?>
+                                            </a>
+                                            <div class="text-muted" style="font-size: 0.6875rem;">
+                                                <?= formatDate($pr['request_date'], 'd M Y') ?>
+                                            </div>
+                                        </td>
+                                        <td class="small">
+                                            <span class="badge bg-light text-dark border"><?= e($pr['department_code']) ?></span>
+                                        </td>
+                                        <td class="small fw-semibold text-dark">
+                                            <?= e($pr['requester_name']) ?>
                                         </td>
                                         <td>
-                                            <span class="fw-semibold small text-dark">
-                                                <?= e($log['full_name'] ?? 'System') ?>
-                                            </span>
+                                            <?= getPriorityBadge($pr['priority']) ?>
                                         </td>
-                                        <td class="small text-muted text-truncate" style="max-width: 220px;" title="<?= e($log['description']) ?>">
-                                            <?= e($log['description'] ?? '-') ?>
+                                        <td class="text-end font-monospace small fw-bold text-dark">
+                                            <?= formatCurrency($pr['estimated_total']) ?>
                                         </td>
-                                        <td class="small font-monospace text-muted">
-                                            <?= e($log['ip_address'] ?? '-') ?>
+                                        <td>
+                                            <?= getStatusBadge($pr['status']) ?>
                                         </td>
-                                        <td class="small text-muted whitespace-nowrap">
-                                            <?= formatDate($log['created_at'], 'd M, h:i A') ?>
+                                        <td class="text-end">
+                                            <a href="<?= url('modules/purchase_requests/view.php?id=' . $pr['id']) ?>" class="btn btn-outline-secondary btn-sm" title="View Details">
+                                                <i class="bi bi-eye"></i>
+                                            </a>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -224,8 +285,47 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
                     </div>
                 <?php else: ?>
                     <div class="text-center py-5 text-muted">
-                        <i class="bi bi-journal-x fs-1 d-block mb-2 text-light"></i>
-                        <p class="mb-0">No activity logs recorded yet.</p>
+                        <i class="bi bi-cart-x fs-1 d-block mb-2 text-light"></i>
+                        <p class="mb-2">No purchase requests recorded yet.</p>
+                        <a href="<?= url('modules/purchase_requests/create.php') ?>" class="btn btn-primary-cms btn-sm">
+                            <i class="bi bi-plus-lg me-1"></i> Create First Request
+                        </a>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Recent Activity Logs -->
+    <div class="col-lg-4">
+        <div class="card-cms h-100">
+            <div class="card-cms-header">
+                <h3 class="card-cms-title">
+                    <i class="bi bi-activity text-primary"></i>
+                    <span>Recent Audit Activity</span>
+                </h3>
+            </div>
+            <div class="card-cms-body p-0">
+                <?php if (!empty($activityLogs)): ?>
+                    <div class="list-group list-group-flush small">
+                        <?php foreach ($activityLogs as $log): ?>
+                            <div class="list-group-item py-2 px-3">
+                                <div class="d-flex justify-content-between align-items-baseline mb-1">
+                                    <span class="fw-bold text-dark"><?= e($log['action']) ?></span>
+                                    <span class="text-muted" style="font-size: 0.6875rem;"><?= formatDate($log['created_at'], 'd M, h:i A') ?></span>
+                                </div>
+                                <div class="text-muted text-truncate" style="font-size: 0.75rem;" title="<?= e($log['description']) ?>">
+                                    <?= e($log['description'] ?? '-') ?>
+                                </div>
+                                <div class="text-muted" style="font-size: 0.6875rem;">
+                                    By <strong class="text-dark"><?= e($log['full_name'] ?? 'System') ?></strong>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php else: ?>
+                    <div class="text-center py-4 text-muted small">
+                        No activity logs available.
                     </div>
                 <?php endif; ?>
             </div>

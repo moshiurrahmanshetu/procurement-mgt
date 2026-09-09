@@ -6,68 +6,81 @@ A business-grade, secure, and responsive Procurement Management Content Manageme
 
 ## Technology Stack
 
-- **Backend:** Raw PHP 8.x (No frameworks, pure native architecture)
+- **Backend:** Raw PHP 8.x (No frameworks, pure native modular architecture)
 - **Database:** MySQL 5.7+ / MariaDB 10.4+ using PDO prepared statements
 - **Frontend:** HTML5, CSS3, Vanilla JavaScript, Bootstrap 5.3.3, Bootstrap Icons 1.11.3
 - **Server Environment:** XAMPP (Apache + MySQL)
 
 ---
 
-## Phase 01 Features Completed
+## Implemented Phases Overview
 
-- **Clean Native Architecture**: Strict Raw PHP with organized `config/`, `includes/`, `auth/`, and `modules/` directories.
-- **Database Schema & Seed**: Independently importable SQL schema (`database/01_auth_schema.sql`) with InnoDB, `utf8mb4`, and foreign keys.
-- **Robust Authentication**:
-  - Secure login with username or email using `password_verify()`.
-  - Secure session handling with strict cookie settings (`HttpOnly`, `SameSite=Lax`).
-  - Single-use password reset tokens (SHA-256 hashed).
-  - Activity audit logging for all authentication and profile events.
-- **Role-Based Access Control Foundation**:
-  - Roles: `Administrator`, `Procurement Officer`, `Manager`, `Requester`.
-  - Access control helpers (`requireLogin()`, `requireRole()`, `userHasRole()`).
-  - Professional 403 Access Denied page for unauthorized access attempts.
-- **CSRF Protection**: Universal CSRF token generation and validation on all state-changing POST forms.
-- **Master UI & Collapsible Sidebar**:
-  - Professional corporate color system using CSS variables (slate sidebar `#0f172a`, neutral body `#f8fafc`, primary accent `#2563eb`).
-  - Fully collapsible sidebar with state persistence using `localStorage`.
-  - Mobile drawer navigation with backdrop overlay.
-  - Fallback avatar generator with user initials (never displays broken images).
-- **Dashboard**:
-  - Real database metrics (user role, account status, last login time, total active users).
-  - System foundation diagnostic status card.
-  - Recent activity audit trail from `activity_logs`.
-- **User Profile & Security Management**:
-  - Update profile details (full name, username, email) with uniqueness validation.
-  - Secure avatar upload supporting JPG, PNG, WEBP (max 2MB) with server-side `finfo` MIME validation, unique randomized filenames, and previous file cleanup.
-  - One-click avatar removal restoring the initials fallback.
-  - Password change with current password verification and bcrypt hashing.
-- **Users Management Module**:
-  - Administrator-only overview table of all registered system accounts, roles, and statuses.
+### Phase 01: Core Authentication & Architecture
+- Clean Raw PHP architecture organized across `config/`, `includes/`, `auth/`, and `modules/`.
+- Database schema & seed (`database/01_auth_schema.sql`) with roles, users, password resets, and activity logs.
+- Secure login, logout, password resets, and session management (`HttpOnly`, `SameSite=Lax`).
+- Role-based access control (`Administrator`, `Procurement Officer`, `Manager`, `Requester`).
+- Enterprise master layout, collapsible sidebar with `localStorage` persistence, and dynamic user initials avatar fallback.
+- User profile editing, secure avatar upload/removal with `finfo` server-side MIME detection, and bcrypt password changes.
+
+### Phase 02: Purchase Request Module
+- Separate schema migration (`database/02_purchase_requests_schema.sql`) creating `departments`, `purchase_requests`, `purchase_request_items`, and `purchase_request_history`.
+- Auto-sequenced human-friendly request numbers (`PR-000001`, `PR-000002`) generated via auto-increment transactions.
+- **Requisition Workflow**:
+  - **Requester**: Create multi-item requisition, save as Draft, edit/delete draft, submit for approval, cancel.
+  - **Manager**: Review pending requisitions, approve, or reject with mandatory reason.
+  - **Procurement Officer**: Monitor all purchase requisitions, search, and filter.
+  - **Administrator**: Full administrative control across all requisitions and workflow states.
+- Dynamic line items grid with client-side live calculations and strict server-side recalculation.
+- Search by Request No and purpose; filters by status, priority, department, date range, and requester.
+- Server-side pagination preserving active filters (20 per page).
+- Chronological workflow audit trail (`purchase_request_history`) with status change timelines.
+- Real-time Purchase Request metrics and recent requisitions table integrated into the main Dashboard.
 
 ---
 
-## Installation & Setup Guide (XAMPP)
+## Purchase Request Workflow State Machine
+
+```
+   [Requester / Staff]
+          │
+          ▼
+    [Create Request]
+          │
+          ▼
+       (Draft) ──────────────► [Delete Draft]
+          │
+          ▼ [Submit]
+ (Pending Approval) ─────────► [Cancel Request]
+    │           │
+    │ [Approve] │ [Reject (Mandatory Reason)]
+    ▼           ▼
+(Approved)   (Rejected)
+```
+
+---
+
+## Database Import & Installation Guide (XAMPP)
 
 ### 1. Place Project in XAMPP
-Ensure the project folder is placed in:
+Ensure the project is located at:
 ```
 C:\xampp\htdocs\procurement-mgt\
 ```
 
-### 2. Import Database Schema
-1. Start **Apache** and **MySQL** in the XAMPP Control Panel.
-2. Open **phpMyAdmin** at [http://localhost/phpmyadmin/](http://localhost/phpmyadmin/) or use the MySQL CLI.
-3. Import the SQL file:
-   ```
-   database/01_auth_schema.sql
-   ```
-   *Via PowerShell:*
+### 2. Import Database Schemas (In Order)
+1. Start **Apache** and **MySQL** in XAMPP Control Panel.
+2. Run in PowerShell:
    ```powershell
-   Get-Content "c:\xampp\htdocs\procurement-mgt\database\01_auth_schema.sql" | & "C:\xampp\mysql\bin\mysql.exe" -u root
+   # 1. Import Phase 01 Auth Schema
+   Get-Content "C:\xampp\htdocs\procurement-mgt\database\01_auth_schema.sql" | & "C:\xampp\mysql\bin\mysql.exe" -u root
+
+   # 2. Import Phase 02 Purchase Requests Schema
+   Get-Content "C:\xampp\htdocs\procurement-mgt\database\02_purchase_requests_schema.sql" | & "C:\xampp\mysql\bin\mysql.exe" -u root procurement_mgt
    ```
 
 ### 3. Verify Database Configuration
-Database connection parameters are located in `config/config.php`:
+Configuration is located in `config/config.php`:
 ```php
 define('DB_HOST', '127.0.0.1');
 define('DB_PORT', 3306);
@@ -111,9 +124,7 @@ procurement-mgt/
 │   │   ├── app.js
 │   │   └── sidebar.js
 │   ├── images/
-│   │   ├── logo/
-│   │   ├── avatars/
-│   │   └── placeholders/
+│   │   └── logo/
 │   └── uploads/
 │       └── avatars/
 │
@@ -131,6 +142,7 @@ procurement-mgt/
 │
 ├── database/
 │   ├── 01_auth_schema.sql
+│   ├── 02_purchase_requests_schema.sql
 │   └── README.md
 │
 ├── includes/
@@ -153,6 +165,19 @@ procurement-mgt/
 │   │   ├── update-profile.php
 │   │   ├── change-password.php
 │   │   └── update-avatar.php
+│   ├── purchase_requests/
+│   │   ├── index.php
+│   │   ├── create.php
+│   │   ├── store.php
+│   │   ├── view.php
+│   │   ├── edit.php
+│   │   ├── update.php
+│   │   ├── delete.php
+│   │   ├── submit.php
+│   │   ├── approve.php
+│   │   ├── reject.php
+│   │   ├── cancel.php
+│   │   └── history.php
 │   └── users/
 │       └── index.php
 │
