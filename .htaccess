@@ -1,0 +1,22 @@
+# ==============================================================================
+# Procurement Management CMS - Apache Configuration
+# ==============================================================================
+
+# Default Directory Index
+DirectoryIndex index.php index.html
+
+# Disable Directory Browsing
+Options -Indexes
+
+# Protect Sensitive Files and Extensions
+<FilesMatch "(?i)\.(sql|env|log|ini|git.*|sh|bak)$">
+    Require all denied
+</FilesMatch>
+
+# Protect Hidden Files
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Enable UTF-8 Encoding
+AddDefaultCharset UTF-8

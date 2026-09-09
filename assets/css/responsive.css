@@ -1,0 +1,97 @@
+/**
+ * Responsive Stylesheet
+ * Procurement Management CMS
+ */
+
+@media (max-width: 991.98px) {
+    :root {
+        --sidebar-width: 260px;
+    }
+
+    .app-sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        width: var(--sidebar-width) !important;
+    }
+
+    .app-sidebar .sidebar-brand {
+        padding: 0 1.25rem !important;
+        justify-content: flex-start !important;
+    }
+
+    .app-sidebar .sidebar-brand .brand-logo-full {
+        display: block !important;
+    }
+
+    .app-sidebar .sidebar-brand .brand-logo-icon {
+        display: none !important;
+    }
+
+    .app-sidebar .nav-section-title,
+    .app-sidebar .nav-link span,
+    .app-sidebar .sidebar-footer .user-details {
+        display: block !important;
+    }
+
+    .app-sidebar .sidebar-menu .nav-link {
+        justify-content: flex-start !important;
+        padding: 0.625rem 0.75rem !important;
+    }
+
+    .app-sidebar .sidebar-menu .nav-link i {
+        margin-right: 0.75rem !important;
+    }
+
+    body.sidebar-mobile-open .app-sidebar {
+        transform: translateX(0);
+    }
+
+    body.sidebar-mobile-open .sidebar-backdrop {
+        display: block;
+    }
+
+    .app-main {
+        margin-left: 0 !important;
+    }
+
+    .app-content {
+        padding: 1.25rem;
+    }
+
+    .app-navbar {
+        padding: 0 1rem;
+    }
+
+    .navbar-user-name,
+    .navbar-user-role {
+        display: none;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .app-content {
+        padding: 1rem;
+    }
+
+    .card-cms-body {
+        padding: 1rem;
+    }
+
+    .card-cms-header {
+        padding: 1rem;
+    }
+
+    .stat-card {
+        padding: 1rem;
+    }
+
+    .stat-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1.25rem;
+    }
+
+    .stat-value {
+        font-size: 1.15rem;
+    }
+}
