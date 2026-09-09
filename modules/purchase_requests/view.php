@@ -81,6 +81,22 @@ try {
     error_log('Fetch PR History Error: ' . $e->getMessage());
 }
 
+// 5. Fetch Associated Quotations (Phase 03 Integration)
+$prQuotations = [];
+try {
+    $qStmt = $db->prepare("
+        SELECT q.*, s.name AS supplier_name, s.supplier_code
+        FROM quotations q
+        JOIN suppliers s ON s.id = q.supplier_id
+        WHERE q.purchase_request_id = :pr_id AND q.deleted_at IS NULL
+        ORDER BY (q.status = 'selected') DESC, q.total_amount ASC, q.id ASC
+    ");
+    $qStmt->execute([':pr_id' => $id]);
+    $prQuotations = $qStmt->fetchAll();
+} catch (Exception $e) {
+    error_log('Fetch PR Quotations Error: ' . $e->getMessage());
+}
+
 $pageTitle = 'Request ' . $pr['request_no'];
 $pageSubtitle = 'Requisition Details & Approval Workflow';
 $activeNav = 'purchase_requests';
@@ -91,6 +107,7 @@ $canSubmit = ($pr['status'] === 'draft' && ($isOwner || $isAdmin));
 $canApproveReject = ($pr['status'] === 'pending_approval' && ($isManager || $isAdmin));
 $canCancel = (in_array($pr['status'], ['draft', 'pending_approval']) && ($isOwner || $isAdmin));
 $canDelete = ($pr['status'] === 'draft' && ($isOwner || $isAdmin));
+$canCreateQuotation = ($pr['status'] === 'approved' && $canViewAll);
 
 require_once dirname(__DIR__, 2) . '/includes/header.php';
 ?>
@@ -160,6 +177,18 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
                 <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal">
                     <i class="bi bi-trash me-1"></i> Delete
                 </button>
+            <?php endif; ?>
+
+            <?php if ($canCreateQuotation): ?>
+                <a href="<?= url('modules/quotations/create.php?purchase_request_id=' . $pr['id']) ?>" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1 shadow-sm">
+                    <i class="bi bi-plus-lg"></i> Record Quotation
+                </a>
+            <?php endif; ?>
+
+            <?php if (count($prQuotations) > 1): ?>
+                <a href="<?= url('modules/quotations/compare.php?purchase_request_id=' . $pr['id']) ?>" class="btn btn-outline-info btn-sm d-inline-flex align-items-center gap-1 shadow-sm">
+                    <i class="bi bi-layout-three-columns"></i> Compare Bids (<?= count($prQuotations) ?>)
+                </a>
             <?php endif; ?>
 
             <a href="<?= url('modules/purchase_requests/index.php') ?>" class="btn btn-light btn-sm text-muted">
@@ -307,7 +336,81 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
                     </table>
                 </div>
             </div>
-        </div>
+        <!-- Supplier Quotations (Bids) Card (Phase 03 Integration) -->
+        <?php if ($pr['status'] === 'approved' || !empty($prQuotations)): ?>
+            <div class="card-cms mt-4">
+                <div class="card-cms-header d-flex justify-content-between align-items-center">
+                    <h3 class="card-cms-title">
+                        <i class="bi bi-receipt-cutoff text-primary"></i>
+                        <span>Supplier Quotations &amp; Bids (<?= count($prQuotations) ?>)</span>
+                    </h3>
+                    <div class="d-flex gap-2">
+                        <?php if (count($prQuotations) > 1): ?>
+                            <a href="<?= url('modules/quotations/compare.php?purchase_request_id=' . $pr['id']) ?>" class="btn btn-outline-info btn-sm">
+                                <i class="bi bi-layout-three-columns me-1"></i> Compare All Bids
+                            </a>
+                        <?php endif; ?>
+                        <?php if ($canCreateQuotation): ?>
+                            <a href="<?= url('modules/quotations/create.php?purchase_request_id=' . $pr['id']) ?>" class="btn btn-primary btn-sm">
+                                <i class="bi bi-plus-lg me-1"></i> Add Quotation
+                            </a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <div class="card-cms-body p-0">
+                    <?php if (empty($prQuotations)): ?>
+                        <div class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-2 text-secondary d-block mb-1"></i>
+                            <span class="small fw-semibold">No supplier quotations recorded yet for this approved request.</span>
+                        </div>
+                    <?php else: ?>
+                        <div class="table-responsive">
+                            <table class="table table-cms align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Quote No</th>
+                                        <th>Supplier Vendor</th>
+                                        <th>Date</th>
+                                        <th class="text-end">Total Amount</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-end">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($prQuotations as $pq): ?>
+                                        <tr class="<?= $pq['status'] === 'selected' ? 'table-success' : '' ?>">
+                                            <td>
+                                                <a href="<?= url('modules/quotations/view.php?id=' . $pq['id']) ?>" class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace text-decoration-none py-1 px-2">
+                                                    <?= e($pq['quotation_no']) ?>
+                                                </a>
+                                            </td>
+                                            <td>
+                                                <div class="fw-semibold text-dark small"><?= e($pq['supplier_name']) ?></div>
+                                                <span class="text-muted small font-monospace"><?= e($pq['supplier_code']) ?></span>
+                                            </td>
+                                            <td class="small text-muted font-monospace">
+                                                <?= formatDate($pq['quotation_date'], 'd M Y') ?>
+                                            </td>
+                                            <td class="text-end font-monospace fw-bold text-dark small">
+                                                <?= formatCurrency($pq['total_amount']) ?>
+                                            </td>
+                                            <td class="text-center">
+                                                <?= getQuotationStatusBadge($pq['status']) ?>
+                                            </td>
+                                            <td class="text-end">
+                                                <a href="<?= url('modules/quotations/view.php?id=' . $pq['id']) ?>" class="btn btn-outline-secondary btn-sm" title="View Quote">
+                                                    <i class="bi bi-eye"></i> View
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
 
     <!-- Right Column: Workflow History Timeline -->

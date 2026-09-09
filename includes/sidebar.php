@@ -54,6 +54,18 @@ $isAdmin = userHasRole('administrator');
                     <span>Purchase Requests</span>
                 </a>
             </li>
+            <li class="nav-item">
+                <a href="<?= url('modules/suppliers/index.php') ?>" class="nav-link <?= ($activeNav === 'suppliers') ? 'active' : '' ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Suppliers Directory">
+                    <i class="bi bi-building"></i>
+                    <span>Suppliers</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= url('modules/quotations/index.php') ?>" class="nav-link <?= ($activeNav === 'quotations') ? 'active' : '' ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="Supplier Quotations">
+                    <i class="bi bi-receipt-cutoff"></i>
+                    <span>Quotations</span>
+                </a>
+            </li>
         </ul>
 
         <?php if ($isAdmin): ?>

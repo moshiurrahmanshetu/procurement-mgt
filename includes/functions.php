@@ -290,3 +290,54 @@ function getPriorityBadge(string $priority): string
     );
 }
 
+/**
+ * Returns a styled Bootstrap badge for quotation statuses.
+ *
+ * @param string $status
+ * @return string
+ */
+function getQuotationStatusBadge(string $status): string
+{
+    $statusMap = [
+        'draft'        => ['class' => 'bg-secondary-subtle text-secondary border border-secondary-subtle', 'icon' => 'bi-file-earmark', 'label' => 'Draft'],
+        'submitted'    => ['class' => 'bg-info-subtle text-info-emphasis border border-info-subtle', 'icon' => 'bi-send-fill', 'label' => 'Submitted'],
+        'under_review' => ['class' => 'bg-warning-subtle text-warning-emphasis border border-warning-subtle', 'icon' => 'bi-search', 'label' => 'Under Review'],
+        'selected'     => ['class' => 'bg-success-subtle text-success border border-success-subtle', 'icon' => 'bi-trophy-fill', 'label' => 'Selected (Awarded)'],
+        'rejected'     => ['class' => 'bg-danger-subtle text-danger border border-danger-subtle', 'icon' => 'bi-x-circle-fill', 'label' => 'Rejected'],
+        'expired'      => ['class' => 'bg-dark-subtle text-dark border border-dark-subtle', 'icon' => 'bi-calendar-x-fill', 'label' => 'Expired'],
+        'cancelled'    => ['class' => 'bg-secondary-subtle text-muted border border-secondary-subtle', 'icon' => 'bi-slash-circle', 'label' => 'Cancelled']
+    ];
+
+    $item = $statusMap[$status] ?? ['class' => 'bg-light text-dark border', 'icon' => 'bi-circle', 'label' => ucfirst(str_replace('_', ' ', $status))];
+
+    return sprintf(
+        '<span class="badge %s px-2 py-1 small fw-semibold d-inline-flex align-items-center gap-1"><i class="bi %s"></i> %s</span>',
+        $item['class'],
+        $item['icon'],
+        htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8')
+    );
+}
+
+/**
+ * Returns a styled Bootstrap badge for supplier statuses.
+ *
+ * @param string $status
+ * @return string
+ */
+function getSupplierStatusBadge(string $status): string
+{
+    $statusMap = [
+        'active'      => ['class' => 'bg-success-subtle text-success border border-success-subtle', 'icon' => 'bi-check-circle-fill', 'label' => 'Active'],
+        'inactive'    => ['class' => 'bg-secondary-subtle text-secondary border border-secondary-subtle', 'icon' => 'bi-pause-circle-fill', 'label' => 'Inactive'],
+        'blacklisted' => ['class' => 'bg-danger-subtle text-danger border border-danger-subtle', 'icon' => 'bi-slash-circle-fill', 'label' => 'Blacklisted']
+    ];
+
+    $item = $statusMap[$status] ?? ['class' => 'bg-light text-dark border', 'icon' => 'bi-circle', 'label' => ucfirst($status)];
+
+    return sprintf(
+        '<span class="badge %s px-2 py-1 small fw-semibold d-inline-flex align-items-center gap-1"><i class="bi %s"></i> %s</span>',
+        $item['class'],
+        $item['icon'],
+        htmlspecialchars($item['label'], ENT_QUOTES, 'UTF-8')
+    );
+}

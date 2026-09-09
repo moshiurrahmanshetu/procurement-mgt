@@ -23,24 +23,30 @@ A business-grade, secure, and responsive Procurement Management Content Manageme
 - Enterprise master layout, collapsible sidebar with `localStorage` persistence, and dynamic user initials avatar fallback.
 - User profile editing, secure avatar upload/removal with `finfo` server-side MIME detection, and bcrypt password changes.
 
-### Phase 02: Purchase Request Module
-- Separate schema migration (`database/02_purchase_requests_schema.sql`) creating `departments`, `purchase_requests`, `purchase_request_items`, and `purchase_request_history`.
-- Auto-sequenced human-friendly request numbers (`PR-000001`, `PR-000002`) generated via auto-increment transactions.
-- **Requisition Workflow**:
-  - **Requester**: Create multi-item requisition, save as Draft, edit/delete draft, submit for approval, cancel.
-  - **Manager**: Review pending requisitions, approve, or reject with mandatory reason.
-  - **Procurement Officer**: Monitor all purchase requisitions, search, and filter.
-  - **Administrator**: Full administrative control across all requisitions and workflow states.
-- Dynamic line items grid with client-side live calculations and strict server-side recalculation.
-- Search by Request No and purpose; filters by status, priority, department, date range, and requester.
-- Server-side pagination preserving active filters (20 per page).
-- Chronological workflow audit trail (`purchase_request_history`) with status change timelines.
-- Real-time Purchase Request metrics and recent requisitions table integrated into the main Dashboard.
+#### Phase 03: Supplier Management & Quotation Management
+- Separate schema migration (`database/03_suppliers_quotations_schema.sql`) creating `suppliers`, `supplier_contacts`, `quotations`, `quotation_items`, and `quotation_history`.
+- **Supplier Directory (`modules/suppliers/`)**:
+  - Full CRUD operations with auto-sequenced vendor codes (`SUP-000001`, `SUP-000002`).
+  - Company profiles, tax/VAT registration, addresses, banking details, and internal notes.
+  - Multi-contact person support with primary contact indicator and role designations.
+  - Complete vendor quotation history and awarded contract statistics.
+  - Soft-delete safeguarding historical bids and quotations for audit compliance.
+- **Quotation Management (`modules/quotations/`)**:
+  - Creation of quotations linked to **approved** Purchase Requests only.
+  - Auto-sequenced quotation identifiers (`QT-000001`, `QT-000002`).
+  - Duplicate bid prevention (one quotation per supplier per PR).
+  - Multi-item pricing grid with live client-side subtotal, tax %, shipping, other charges, and grand total calculations, coupled with strict server-side validation.
+  - State machine transitions: `draft` -> `submitted` -> `under_review` -> `selected` / `rejected`.
+  - **Quotation Comparison Matrix (`compare.php`)**: Side-by-side evaluation matrix with lowest-bid indicator, line item price comparisons, and variance against PR estimated budgets.
+  - **Winning Quotation Selection (`select.php`)**: Single winning bid selection by Administrator or Manager that automatically and safely marks all competing bids for that PR as `rejected` in a single database transaction.
+  - **Rejection with Reason (`reject.php`)**: Rejection logging requiring mandatory justification comments.
+  - **Chronological Audit Trail (`history.php`)**: Full state-change timeline and audit logs.
 
 ---
 
-## Purchase Request Workflow State Machine
+## Workflow State Machines
 
+### 1. Purchase Request State Machine
 ```
    [Requester / Staff]
           │
@@ -56,6 +62,26 @@ A business-grade, secure, and responsive Procurement Management Content Manageme
     │ [Approve] │ [Reject (Mandatory Reason)]
     ▼           ▼
 (Approved)   (Rejected)
+```
+
+### 2. Supplier Quotation State Machine
+```
+   [Approved PR]
+         │
+         ▼
+ [Create Quotation]
+         │
+         ▼
+      (Draft) ───────────────► [Delete Draft]
+         │
+         ▼ [Submit]
+    (Submitted)
+         │
+         ▼ [Mark Under Review]
+   (Under Review) ────────────► [Reject Bid (Mandatory Reason)]
+         │
+         ▼ [Award Winning Bid]
+     (Selected) ───► [Automatically Rejects Competing Bids for PR]
 ```
 
 ---
@@ -77,6 +103,9 @@ C:\xampp\htdocs\procurement-mgt\
 
    # 2. Import Phase 02 Purchase Requests Schema
    Get-Content "C:\xampp\htdocs\procurement-mgt\database\02_purchase_requests_schema.sql" | & "C:\xampp\mysql\bin\mysql.exe" -u root procurement_mgt
+
+   # 3. Import Phase 03 Suppliers & Quotations Schema
+   Get-Content "C:\xampp\htdocs\procurement-mgt\database\03_suppliers_quotations_schema.sql" | & "C:\xampp\mysql\bin\mysql.exe" -u root procurement_mgt
    ```
 
 ### 3. Verify Database Configuration
@@ -114,19 +143,9 @@ http://localhost/procurement-mgt/
 procurement-mgt/
 ├── assets/
 │   ├── css/
-│   │   ├── bootstrap.min.css
-│   │   ├── bootstrap-icons.css
-│   │   ├── style.css
-│   │   ├── responsive.css
-│   │   └── auth.css
 │   ├── js/
-│   │   ├── bootstrap.bundle.min.js
-│   │   ├── app.js
-│   │   └── sidebar.js
 │   ├── images/
-│   │   └── logo/
 │   └── uploads/
-│       └── avatars/
 │
 ├── auth/
 │   ├── login.php
@@ -143,6 +162,7 @@ procurement-mgt/
 ├── database/
 │   ├── 01_auth_schema.sql
 │   ├── 02_purchase_requests_schema.sql
+│   ├── 03_suppliers_quotations_schema.sql
 │   └── README.md
 │
 ├── includes/
@@ -161,10 +181,6 @@ procurement-mgt/
 │   ├── dashboard/
 │   │   └── index.php
 │   ├── profile/
-│   │   ├── index.php
-│   │   ├── update-profile.php
-│   │   ├── change-password.php
-│   │   └── update-avatar.php
 │   ├── purchase_requests/
 │   │   ├── index.php
 │   │   ├── create.php
@@ -177,6 +193,30 @@ procurement-mgt/
 │   │   ├── approve.php
 │   │   ├── reject.php
 │   │   ├── cancel.php
+│   │   └── history.php
+│   ├── suppliers/
+│   │   ├── index.php
+│   │   ├── create.php
+│   │   ├── store.php
+│   │   ├── view.php
+│   │   ├── edit.php
+│   │   ├── update.php
+│   │   ├── delete.php
+│   │   ├── store-contact.php
+│   │   └── delete-contact.php
+│   ├── quotations/
+│   │   ├── index.php
+│   │   ├── create.php
+│   │   ├── store.php
+│   │   ├── view.php
+│   │   ├── edit.php
+│   │   ├── update.php
+│   │   ├── delete.php
+│   │   ├── submit.php
+│   │   ├── review.php
+│   │   ├── select.php
+│   │   ├── reject.php
+│   │   ├── compare.php
 │   │   └── history.php
 │   └── users/
 │       └── index.php

@@ -87,7 +87,47 @@ try {
     error_log('Dashboard Recent PRs Error: ' . $e->getMessage());
 }
 
-// 3. Fetch Recent Activity Logs
+// 3. Fetch Phase 03 Supplier & Quotation Summary Metrics
+$supplierCount = 0;
+$quotationStats = [
+    'total'         => 0,
+    'under_review'  => 0,
+    'selected'      => 0,
+    'awarded_value' => 0.00
+];
+$recentQuotations = [];
+
+try {
+    $supCountStmt = $db->query("SELECT COUNT(*) FROM suppliers WHERE deleted_at IS NULL AND status = 'active'");
+    $supplierCount = (int)$supCountStmt->fetchColumn();
+
+    $qStatStmt = $db->query("
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN status IN ('submitted', 'under_review') THEN 1 ELSE 0 END) AS under_review,
+            SUM(CASE WHEN status = 'selected' THEN 1 ELSE 0 END) AS selected,
+            SUM(CASE WHEN status = 'selected' THEN total_amount ELSE 0 END) AS awarded_value
+        FROM quotations
+        WHERE deleted_at IS NULL
+    ");
+    $quotationStats = $qStatStmt->fetch() ?: $quotationStats;
+
+    // Fetch Top 5 Recent Quotations
+    $rqStmt = $db->query("
+        SELECT q.*, pr.request_no, s.name AS supplier_name, s.supplier_code
+        FROM quotations q
+        JOIN purchase_requests pr ON pr.id = q.purchase_request_id
+        JOIN suppliers s ON s.id = q.supplier_id
+        WHERE q.deleted_at IS NULL
+        ORDER BY q.id DESC
+        LIMIT 5
+    ");
+    $recentQuotations = $rqStmt->fetchAll();
+} catch (Exception $e) {
+    error_log('Dashboard Phase 03 Query Error: ' . $e->getMessage());
+}
+
+// 4. Fetch Recent Activity Logs
 $activityLogs = [];
 try {
     $actStmt = $db->prepare("
@@ -110,10 +150,10 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
 <div class="card-cms mb-4 border-0 shadow-sm" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: #ffffff;">
     <div class="card-cms-body p-4">
         <div class="row align-items-center">
-            <div class="col-lg-8">
-                <div class="d-flex align-items-center gap-3 mb-2">
+            <div class="col-lg-7">
+                <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
                     <span class="badge bg-primary px-3 py-2 fs-7 font-monospace fw-semibold">
-                        <i class="bi bi-cart-check-fill me-1"></i> Phase 02: PR Module
+                        <i class="bi bi-building-check me-1"></i> Phase 03: Suppliers &amp; Quotations
                     </span>
                     <span class="badge bg-success bg-opacity-75 px-3 py-2 fs-7">
                         <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i> <?= ucfirst(e($user['status'])) ?>
@@ -125,13 +165,18 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
                     Last logged in: <span class="text-white"><?= formatDate($user['last_login']) ?></span>
                 </p>
             </div>
-            <div class="col-lg-4 text-lg-end mt-3 mt-lg-0">
-                <a href="<?= url('modules/purchase_requests/create.php') ?>" class="btn btn-primary btn-sm fw-semibold px-3 py-2 shadow-sm me-2">
+            <div class="col-lg-5 text-lg-end mt-3 mt-lg-0 d-flex flex-wrap justify-content-lg-end gap-2">
+                <a href="<?= url('modules/purchase_requests/create.php') ?>" class="btn btn-primary btn-sm fw-semibold px-3 py-2 shadow-sm">
                     <i class="bi bi-plus-lg me-1"></i> New Request
                 </a>
-                <a href="<?= url('modules/profile/index.php') ?>" class="btn btn-light btn-sm fw-semibold px-3 py-2 shadow-sm">
-                    <i class="bi bi-person-gear me-1"></i> Profile
-                </a>
+                <?php if ($canViewAll): ?>
+                    <a href="<?= url('modules/quotations/create.php') ?>" class="btn btn-success btn-sm fw-semibold px-3 py-2 shadow-sm">
+                        <i class="bi bi-receipt me-1"></i> Record Quote
+                    </a>
+                    <a href="<?= url('modules/suppliers/create.php') ?>" class="btn btn-outline-light btn-sm fw-semibold px-3 py-2 shadow-sm">
+                        <i class="bi bi-building-add me-1"></i> Add Vendor
+                    </a>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -218,8 +263,63 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
     </div>
 </div>
 
+<!-- Procurement & Sourcing Metrics Cards (Phase 03) -->
+<div class="row g-3 mb-4">
+    <!-- Active Suppliers -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card border-start border-primary border-4">
+            <div class="stat-icon primary" style="width: 42px; height: 42px; font-size: 1.25rem;">
+                <i class="bi bi-building"></i>
+            </div>
+            <div>
+                <div class="stat-label" style="font-size: 0.75rem;">Active Suppliers</div>
+                <h4 class="stat-value fs-5 text-gray-800"><?= number_format($supplierCount) ?></h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Total Quotations -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card border-start border-info border-4">
+            <div class="stat-icon" style="width: 42px; height: 42px; font-size: 1.25rem; background-color: #e0f2fe; color: #0284c7;">
+                <i class="bi bi-file-earmark-spreadsheet"></i>
+            </div>
+            <div>
+                <div class="stat-label" style="font-size: 0.75rem;">Total Quotations</div>
+                <h4 class="stat-value fs-5 text-info"><?= number_format((int)$quotationStats['total']) ?></h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Awarded Bids -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card border-start border-success border-4">
+            <div class="stat-icon success" style="width: 42px; height: 42px; font-size: 1.25rem;">
+                <i class="bi bi-trophy-fill"></i>
+            </div>
+            <div>
+                <div class="stat-label" style="font-size: 0.75rem;">Awarded Bids</div>
+                <h4 class="stat-value fs-5 text-success"><?= number_format((int)$quotationStats['selected']) ?></h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Awarded Value -->
+    <div class="col-sm-6 col-xl-3">
+        <div class="stat-card border-start border-warning border-4">
+            <div class="stat-icon warning" style="width: 42px; height: 42px; font-size: 1.25rem;">
+                <i class="bi bi-cash-stack"></i>
+            </div>
+            <div>
+                <div class="stat-label" style="font-size: 0.75rem;">Awarded Value</div>
+                <h4 class="stat-value fs-5 text-warning-emphasis font-monospace"><?= formatCurrency($quotationStats['awarded_value']) ?></h4>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Main Content Grid: Recent PRs & System Audit -->
-<div class="row g-4">
+<div class="row g-4 mb-4">
     <!-- Recent Purchase Requests Table -->
     <div class="col-lg-8">
         <div class="card-cms h-100">
@@ -330,6 +430,77 @@ require_once dirname(__DIR__, 2) . '/includes/header.php';
                 <?php endif; ?>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Recent Supplier Quotations Card (Phase 03) -->
+<div class="card-cms mb-4">
+    <div class="card-cms-header d-flex justify-content-between align-items-center">
+        <h3 class="card-cms-title">
+            <i class="bi bi-receipt-cutoff text-primary"></i>
+            <span>Recent Supplier Quotations</span>
+        </h3>
+        <a href="<?= url('modules/quotations/index.php') ?>" class="btn btn-outline-secondary btn-sm">
+            View All Quotations <i class="bi bi-arrow-right ms-1"></i>
+        </a>
+    </div>
+    <div class="card-cms-body p-0">
+        <?php if (!empty($recentQuotations)): ?>
+            <div class="table-responsive">
+                <table class="table table-cms align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Quote No</th>
+                            <th>Requisition</th>
+                            <th>Supplier Vendor</th>
+                            <th>Date</th>
+                            <th class="text-end">Total Amount</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($recentQuotations as $rq): ?>
+                            <tr>
+                                <td>
+                                    <a href="<?= url('modules/quotations/view.php?id=' . $rq['id']) ?>" class="fw-bold font-monospace text-primary text-decoration-none">
+                                        <?= e($rq['quotation_no']) ?>
+                                    </a>
+                                </td>
+                                <td>
+                                    <a href="<?= url('modules/purchase_requests/view.php?id=' . $rq['purchase_request_id']) ?>" class="text-dark fw-semibold text-decoration-none small">
+                                        <?= e($rq['request_no']) ?>
+                                    </a>
+                                </td>
+                                <td>
+                                    <div class="fw-medium text-dark small"><?= e($rq['supplier_name']) ?></div>
+                                    <span class="text-muted small font-monospace"><?= e($rq['supplier_code']) ?></span>
+                                </td>
+                                <td class="small text-muted font-monospace">
+                                    <?= formatDate($rq['quotation_date'], 'd M Y') ?>
+                                </td>
+                                <td class="text-end font-monospace small fw-bold text-dark">
+                                    <?= formatCurrency($rq['total_amount']) ?>
+                                </td>
+                                <td class="text-center">
+                                    <?= getQuotationStatusBadge($rq['status']) ?>
+                                </td>
+                                <td class="text-end">
+                                    <a href="<?= url('modules/quotations/view.php?id=' . $rq['id']) ?>" class="btn btn-outline-secondary btn-sm" title="View Quotation">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php else: ?>
+            <div class="text-center py-4 text-muted small">
+                <i class="bi bi-receipt fs-2 text-secondary d-block mb-1"></i>
+                No vendor quotations recorded yet.
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 
